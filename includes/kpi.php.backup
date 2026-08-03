@@ -154,37 +154,3 @@ function kpi_stok_menipis(PDO $pdo): array
  * @param PDO $pdo
  * @return array Daftar prediksi per bahan dengan nama_bahan, forecasted_val, next_week, mad_error, satuan
  */
-function kpi_ringkasan_prediksi(PDO $pdo): array {
-    if (!boleh_prediksi()) {
-        return [];
-    }
-
-    $stmt = $pdo->query("
-        SELECT 
-            kategori_x,
-            GROUP_CONCAT(nama_bahan) as nama_bahan,
-            MAX(satuan) as satuan
-        FROM mapping_bahan
-        WHERE kategori_x IN ('X1','X2','X3','X4','X5','X6')
-        GROUP BY kategori_x
-        ORDER BY kategori_x ASC
-    ");
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $stmtModel = $pdo->query("SELECT * FROM model_regresi ORDER BY id DESC LIMIT 1");
-    $model = $stmtModel->fetch(PDO::FETCH_ASSOC);
-    $mad = (float)($model['mad'] ?? 2.01);
-
-    $hasil = [];
-    foreach ($rows as $r) {
-        $hasil[] = [
-            'nama_bahan'     => kategori_to_label($r['kategori_x']),
-            'kategori_x'     => $r['kategori_x'],
-            'forecasted_val' => 0.0,
-            'next_week'      => 'Estimasi',
-            'mad_error'      => $mad,
-            'satuan'         => $r['satuan'] ?? 'Kg'
-        ];
-    }
-    return $hasil;
-}

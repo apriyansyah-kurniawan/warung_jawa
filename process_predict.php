@@ -12,7 +12,7 @@
 // Pastikan hanya Admin dan Owner yang bisa mengakses endpoint ini
 require_once 'config.php';
 require_once 'includes/auth.php';
-$user_role = strtolower(trim($_SESSION['role'] ?? ''));
+$user_role = strtolower($_SESSION['role'] ?? '');
 if (!in_array($user_role, ['admin', 'owner'])) {
     echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya Admin/Owner yang diizinkan.']);
     exit;
