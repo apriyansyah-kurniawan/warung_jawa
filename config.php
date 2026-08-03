@@ -1,0 +1,244 @@
+<?php
+
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'warung_jawa');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+
+define('PYTHON_PATH', __DIR__ . '/path/to/venv/bin/python3');
+define('DAFTAR_SATUAN', ['Kg', 'Ons', 'Ikat', 'Liter', 'Pcs']);
+
+/** Timeout session: 15 menit tanpa aktivitas (dalam detik) */
+define('SESSION_TIMEOUT', 900);
+
+/** Ambang stok menipis */
+define('STOK_THRESHOLD_KG', 5);
+define('STOK_THRESHOLD_IKAT', 5);
+
+/**
+ * Daftar menu jualan Kasir beserta harga dan resep bahan baku.
+ *
+ * Setiap menu punya:
+ *   - harga   : harga per porsi (Rupiah)
+ *   - resep   : bahan yang otomatis berkurang di stok_keluar saat terjual
+ *       - nama_bahan : nama bahan di tabel stok_keluar (harus cocok dengan predict.py)
+ *       - pengali    : jumlah bahan terpakai PER 1 porsi
+ *       - satuan     : satuan bahan (Kg / Ikat)
+ */
+define('DAFTAR_MENU', [
+    'Nasi Ayam Jawa' => [
+        'harga' => 25000,
+        'resep' => [
+            'nama_bahan' => 'Ayam',
+            'pengali'    => 0.25,
+            'satuan'     => 'Kg',
+        ],
+    ],
+    'Gulai Daging' => [
+        'harga' => 35000,
+        'resep' => [
+            'nama_bahan' => 'Daging',
+            'pengali'    => 0.20,
+            'satuan'     => 'Kg',
+        ],
+    ],
+    'Pecel Daun Ubi' => [
+        'harga' => 15000,
+        'resep' => [
+            'nama_bahan' => 'Daun Ubi',
+            'pengali'    => 1.0,
+            'satuan'     => 'Ikat',
+        ],
+    ],
+]);
+
+/**
+ * Ambil konfigurasi menu berdasarkan nama.
+ *
+ * Fungsi ini mencoba mengambil data dari database terlebih dahulu.
+ * Jika gagal (koneksi/database error), maka fallback ke DAFTAR_MENU statis.
+ *
+ * @param string $nama_menu Nama menu yang dicari
+ * @return array|null Data menu jika ditemukan, null jika tidak ditemukan
+ */
+function ambil_menu($nama_menu)
+{
+    // Coba ambil dari database terlebih dahulu
+    $menu_db = get_menu_from_db();
+    if ($menu_db !== null && isset($menu_db[$nama_menu])) {
+        return $menu_db[$nama_menu];
+    }
+
+    // Fallback ke konfigurasi statis
+    return DAFTAR_MENU[$nama_menu] ?? null;
+}
+
+/**
+ * Ambil seluruh menu dari database (hanya yang is_menu_utama = 1).
+ *
+ * Fungsi ini mencoba mengambil semua menu aktif dari database.
+ * Jika gagal (koneksi/database error), maka mengembalikan null
+ * sehingga pemanggil dapat entscheiden apakah akan menggunakan fallback.
+ *
+ * @return array|null Array menu dalam format yang sama dengan DAFTAR_MENU, atau null jika gagal
+ */
+function get_menu_from_db()
+{
+    try {
+        $dsn = 'mysql:unix_socket=/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock;dbname=' . DB_NAME . ';charset=utf8mb4';
+        $opsi_pdo = [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ];
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, $opsi_pdo);
+
+        $stmt = $pdo->query('
+            SELECT
+                nama_menu,
+                COALESCE(harga, 0) as harga,
+                COALESCE(resep_nama_bahan, \'\') as nama_bahan,
+                COALESCE(resep_pengali, 0) as pengali,
+                COALESCE(resep_satuan, \'\') as satuan
+            FROM master_menu
+            WHERE is_menu_utama = 1
+            ORDER BY nama_menu
+        ');
+
+        $menu = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $menu[$row['nama_menu']] = [
+                'harga' => (float) $row['harga'],
+                'resep' => [
+                    'nama_bahan' => $row['nama_bahan'],
+                    'pengali'    => (float) $row['pengali'],
+                    'satuan'     => $row['satuan']
+                ]
+            ];
+        }
+
+        return $menu;
+    } catch (PDOException $e) {
+        // Log kesalahan untuk debugging (opsional)
+        // error_log("Database error in get_menu_from_db: " . $e->getMessage());
+        return null; // Indikasi kegagalan, akan trigger fallback di ambil_menu()
+    } catch (Exception $e) {
+        // Menangkap pengecualian umum
+        // error_log("Unexpected error in get_menu_from_db: " . $e->getMessage());
+        return null;
+    }
+}
+
+/** Format jumlah bahan + satuan, contoh: "3.60 Kg" */
+function format_jumlah($jumlah, $satuan)
+{
+    return number_format((float) $jumlah, 2) . ' ' . htmlspecialchars($satuan);
+}
+
+/** Format angka ke Rupiah, contoh: "Rp 25.000" */
+function format_rupiah($angka)
+{
+    return 'Rp ' . number_format((float) $angka, 0, ',', '.');
+}
+
+/** Satuan default berdasarkan nama bahan */
+function satuan_default($nama_bahan)
+{
+    $nama = strtolower(trim($nama_bahan));
+    if (str_contains($nama, 'daun') || str_contains($nama, 'saya')) {
+        return 'Ikat';
+    }
+    return 'Kg';
+}
+
+/**
+ * Get kategori X (X1-X6) for a given bahan.
+ * @param string $nama_bahan
+ * @return string|null e.g., 'X1' or null if not found
+ */
+function get_bahan_category($nama_bahan)
+{
+    global $pdo;
+    try {
+        $stmt = $pdo->prepare('SELECT kategori_x FROM mapping_bahan WHERE nama_bahan = :nama_bahan LIMIT 1');
+        $stmt->execute(['nama_bahan' => $nama_bahan]);
+        $row = $stmt->fetch();
+        return $row ? $row['kategori_x'] : null;
+    } catch (PDOException $e) {
+        error_log("Error in get_bahan_category: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Get faktor konversi for a given bahan (default 1.0).
+ * @param string $nama_bahan
+ * @return float
+ */
+function get_bahan_faktor($nama_bahan)
+{
+    global $pdo;
+    try {
+        $stmt = $pdo->prepare('SELECT faktor_konversi FROM mapping_bahan WHERE nama_bahan = :nama_bahan LIMIT 1');
+        $stmt->execute(['nama_bahan' => $nama_bahan]);
+        $row = $stmt->fetch();
+        return $row ? (float)$row['faktor_konversi'] : 1.0;
+    } catch (PDOException $e) {
+        error_log("Error in get_bahan_faktor: " . $e->getMessage());
+        return 1.0;
+    }
+}
+
+/**
+ * Compute X1..X6 values per porsi for a given menu.
+ * @param string $nama_menu
+ * @return array|null with keys 'X1'..'X6' (float) or null if menu not found or error
+ */
+function hitung_x_values_from_menu($nama_menu)
+{
+    global $pdo;
+    try {
+        // Get menu resep from DB (or fallback)
+        $menu = ambil_menu($nama_menu);
+        if (!$menu) {
+            return null;
+        }
+        $bahan = $menu['resep']['nama_bahan'];
+        $pengali = (float)$menu['resep']['pengali'];
+        $satuan = $menu['resep']['satuan'];
+
+        $kategori = get_bahan_category($bahan);
+        if (!$kategori) {
+            // Bahan tidak terpetakan ke kategori X1-X6
+            return null;
+        }
+
+        $faktor = get_bahan_faktor($bahan);
+        $nilai = $pengali * $faktor; // per porsi
+
+        // Initialize all X to 0
+        $result = [];
+        for ($i = 1; $i <= 6; $i++) {
+            $result["X{$i}"] = 0.0;
+        }
+        if ($kategori && preg_match('/^X([1-6])$/', $kategori, $matches)) {
+            $idx = (int)$matches[1];
+            $result["X{$idx}"] = (float)$nilai;
+        }
+        return $result;
+    } catch (Exception $e) {
+        error_log("Error in hitung_x_values_from_menu: " . $e->getMessage());
+        return null;
+    }
+}
+
+// Inisialisasi koneksi database
+try {
+    $dsn = 'mysql:unix_socket=/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock;dbname=' . DB_NAME . ';charset=utf8mb4';
+    $opsi_pdo = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ];
+    $pdo = new PDO($dsn, DB_USER, DB_PASS, $opsi_pdo);
+} catch (PDOException $e) {
+    die('Koneksi database gagal: ' . $e->getMessage());
+}

@@ -1,0 +1,264 @@
+<?php
+/**
+ * KPIs: Mengambil seluruh data KPI untuk dashboard.
+ * Menghasilkan array dengan kunci:
+ *   - 'penjualan': ringkasan penjualan
+ *   - 'stok_tersedia': stok di atas ambang
+ *   - 'stok_menipis': stok di bawah atau sama dengan ambang
+ *   - 'prediksi': prediksi penggunaan bahan baku untuk minggu depan
+ *
+ * @param PDO $pdo Koneksi database
+ * @return array Data KPI
+ */
+function ambil_semua_kpi(PDO $pdo): array
+{
+    $kpi = [
+        'penjualan' => kpi_penjualan($pdo),
+        'stok_tersedia' => kpi_stok_tersedia($pdo),
+        'stok_menipis' => kpi_stok_menipis($pdo),
+        'prediksi' => kpi_ringkasan_prediksi($pdo),
+    ];
+    // Clear prediction cache to ensure fresh data on next request
+    unset($_SESSION['kpi_prediksi_cache']);
+    return $kpi;
+}
+
+/**
+ * KPI 1: Ringkasan Penjualan
+ * Menghitung total omzet, total porsi, dan jumlah transaksi.
+ *
+ * @param PDO $pdo
+ * @return array ['total_omzet'=>float, 'total_porsi'=>int, 'jumlah_transaksi'=>int]
+ */
+function kpi_penjualan(PDO $pdo): array
+{
+    // Ambil seluruh data penjualan (tidak hanya hari ini)
+    $stmt = $pdo->query('
+        SELECT
+            COALESCE(SUM(total_harga), 0) AS total_omzet,
+            COALESCE(SUM(jumlah_porsi), 0) AS total_porsi,
+            COUNT(*) AS jumlah_transaksi
+        FROM penjualan
+    ');
+    $row = $stmt->fetch();
+
+    return [
+        'total_omzet' => (float) $row['total_omzet'],
+        'total_porsi' => (int) $row['total_porsi'],
+        'jumlah_transaksi' => (int) $row['jumlah_transaksi'],
+    ];
+}
+
+/**
+ * Helper: map kategori X to human-readable label
+ */
+function kategori_to_label(string $kategori): string
+{
+    $map = [
+        'X1' => 'Ayam',
+        'X2' => 'Sapi/Tetelan',
+        'X3' => 'Beras',
+        'X4' => 'Bumbu Merah',
+        'X5' => 'Bumbu Bawang',
+        'X6' => 'Minyak/Santan',
+    ];
+    return $map[$kategori] ?? $kategori;
+}
+
+/**
+ * KPI 2: Stok Tersedia (di atas ambang threshold)
+ * Mengambil stok bahan baku yang sisa di atas ambang threshold,
+ * dikelompokkan oleh kategori_bahan (X1-X6) dari mapping_bahan,
+ * dengan konversi ke satuan dasar (kg) menggunakan faktor_konversi.
+ *
+ * @param PDO $pdo
+ * @return array Daftar bahan dengan nama_bahan (label kategori), sisa (kg), satuan (Kg)
+ */
+function kpi_stok_tersedia(PDO $pdo): array
+{
+    $sql = "
+        SELECT
+            m.kategori_x,
+            COALESCE(SUM(sm.jumlah_masuk * m.faktor_konversi), 0) AS total_masuk_kg,
+            COALESCE(SUM(sk.jumlah_terpakai * m.faktor_konversi), 0) AS total_keluar_kg
+        FROM mapping_bahan m
+        LEFT JOIN stok_masuk sm ON m.nama_bahan = sm.nama_bahan
+        LEFT JOIN stok_keluar sk ON m.nama_bahan = sk.nama_bahan
+        WHERE m.kategori_x IN ('X1','X2','X3','X4','X5','X6')
+        GROUP BY m.kategori_x
+    ";
+    $stmt = $pdo->query($sql);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $hasil = [];
+
+    foreach ($rows as $row) {
+        $sisa_kg = (float) $row['total_masuk_kg'] - (float) $row['total_keluar_kg'];
+        if ($sisa_kg > STOK_THRESHOLD_KG) {
+            $hasil[] = [
+                'nama_bahan' => kategori_to_label($row['kategori_x']),
+                'sisa' => $sisa_kg,
+                'satuan' => 'Kg',
+            ];
+        }
+    }
+
+    return $hasil;
+}
+
+/**
+ * KPI 3: Stok Menipis (di bawah atau sama dengan ambang threshold)
+ * Mirip dengan kpi_stok_tersedia tetapi untuk stok di bawah ambang.
+ *
+ * @param PDO $pdo
+ * @return array Daftar bahan dengan nama_bahan (label kategori), sisa (kg), satuan (Kg)
+ */
+function kpi_stok_menipis(PDO $pdo): array
+{
+    $sql = "
+        SELECT
+            m.kategori_x,
+            COALESCE(SUM(sm.jumlah_masuk * m.faktor_konversi), 0) AS total_masuk_kg,
+            COALESCE(SUM(sk.jumlah_terpakai * m.faktor_konversi), 0) AS total_keluar_kg
+        FROM mapping_bahan m
+        LEFT JOIN stok_masuk sm ON m.nama_bahan = sm.nama_bahan
+        LEFT JOIN stok_keluar sk ON m.nama_bahan = sk.nama_bahan
+        WHERE m.kategori_x IN ('X1','X2','X3','X4','X5','X6')
+        GROUP BY m.kategori_x
+    ";
+    $stmt = $pdo->query($sql);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $hasil = [];
+
+    foreach ($rows as $row) {
+        $sisa_kg = (float) $row['total_masuk_kg'] - (float) $row['total_keluar_kg'];
+        if ($sisa_kg <= STOK_THRESHOLD_KG) {
+            $hasil[] = [
+                'nama_bahan' => kategori_to_label($row['kategori_x']),
+                'sisa' => $sisa_kg,
+                'satuan' => 'Kg',
+            ];
+        }
+    }
+
+    return $hasil;
+}
+
+/**
+ * KPI 4: Ringkasan Prediksi Minggu Depan
+ * Menggunakan data historis dari stok_keluar untuk menghitung rata-rata penggunaan
+ * per bahan dalam 7 hari terakhir sebagai prediksi untuk minggu depan.
+ * Grup berdasarkan kategori X1-X6 dari mapping_bahan.
+ *
+ * @param PDO $pdo
+ * @return array Daftar prediksi per bahan dengan nama_bahan, forecasted_val, next_week, mad_error, satuan
+ */
+function kpi_ringkasan_prediksi(PDO $pdo): array
+{
+    if (!boleh_prediksi()) {
+        return [];
+    }
+
+    // Cache prediksi KPI selama 24 jam agar dashboard tidak lambat
+    session_cache_limiter('private_no_expire');
+    session_cache_expire(60 * 24);
+
+    $cache_key = 'kpi_prediksi_cache';
+    if (
+        !empty($_SESSION[$cache_key])
+        && (time() - ($_SESSION[$cache_key]['waktu'] ?? 0)) < 60 * 60 * 24
+    ) {
+        return $_SESSION[$cache_key]['data'];
+    }
+
+    // Get all kategori X (X1-X6) with their bahan
+    $kategori_rows = $pdo->query('
+        SELECT kategori_x, GROUP_CONCAT(nama_bahan SEPARATOR \" | \") as bahan_list
+        FROM mapping_bahan
+        WHERE kategori_x IN (\'X1\',\'X2\',\'X3\',\'X4\',\'X5\',\'X6\')
+        GROUP BY kategori_x
+        ORDER BY kategori_x
+    ')->fetchAll(PDO::FETCH_ASSOC);
+
+    $hasil = [];
+
+    foreach ($kategori_rows as $kategori) {
+        // Ambil semua bahan dalam kategori ini
+        $bahan_list = explode(' | ', $kategori['bahan_list']);
+
+        // Hitung total prediksi untuk seluruh bahan dalam kategori ini
+        $total_forecasted = 0.0;
+        $total_mad_error = 0.0;
+        $bahan_count = count($bahan_list);
+
+        foreach ($bahan_list as $nama_bahan) {
+            $nama_bahan = trim($nama_bahan);
+            if (empty($nama_bahan)) continue;
+
+            // Ambil 7 hari terakhir penggunaan bahan ini dari stok_keluar
+            $stmt = $pdo->prepare('
+                SELECT jumlah_terpakai
+                FROM stok_keluar
+                WHERE nama_bahan = :nama
+                    AND tanggal >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                ORDER BY tanggal DESC
+            ');
+            $stmt->execute(['nama' => $nama_bahan]);
+            $usage_rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            $forecasted_val = 0.0;
+            $mad_error = 0.0;
+
+            if (!empty($usage_rows)) {
+                // Hitung rata-rata penggunaan harian
+                $total = array_sum($usage_rows);
+                $count = count($usage_rows);
+                $forecasted_val = $count > 0 ? $total / $count : 0.0;
+
+                // Hitung MAD sederhana: rata-rata deviasi absolut dari rata-rata
+                if ($count > 0) {
+                    $deviations = array_map(function ($val) use ($forecasted_val) {
+                        return abs($val - $forecasted_val);
+                    }, $usage_rows);
+                    $mad_error = array_sum($deviations) / $count;
+                }
+            }
+
+            $total_forecasted += $forecasted_val;
+            $total_mad_error += $mad_error;
+        }
+
+        // Rata-rata untuk kategori
+        $avg_forecasted = $bahan_count > 0 ? $total_forecasted / $bahan_count : 0.0;
+        $avg_mad_error = $bahan_count > 0 ? $total_mad_error / $bahan_count : 0.0;
+
+        // Dapatkan satuan dominan untuk kategori ini
+        $satuan = 'Kg'; // default
+        $stmtSatuan = $pdo->prepare('
+            SELECT m.satuan
+            FROM mapping_bahan m
+            WHERE m.kategori_x = :kategori
+            GROUP BY m.satuan
+            ORDER BY COUNT(*) DESC
+            LIMIT 1
+        ');
+        $stmtSatuan->execute(['kategori' => $kategori['kategori_x']]);
+        $satuan_result = $stmtSatuan->fetchColumn();
+        if ($satuan_result !== false && $satuan_result !== null) {
+            $satuan = $satuan_result;
+        }
+
+        $hasil[] = [
+            'nama_bahan'     => $kategori['kategori_x'], // keep kategori code for prediction display
+            'forecasted_val' => $avg_forecasted,
+            'next_week'      => 'Minggu depan',
+            'mad_error'      => $avg_mad_error,
+            'satuan'         => $satuan,
+        ];
+    }
+
+    $_SESSION[$cache_key] = ['waktu' => time(), 'data' => $hasil];
+    unset($_SESSION['kpi_prediksi_cache']);
+    return $hasil;
+}
