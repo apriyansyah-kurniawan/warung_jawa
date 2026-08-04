@@ -2,22 +2,15 @@
 /**
  * simpan_stok.php
  * -------------------------------------------------------------------------
- * Handler koreksi manual stok_keluar (HANYA Admin).
+ * Handler koreksi manual stok_keluar (HANYA Admin dan Owner).
  * Kasir tidak lagi input bahan mentah — stok keluar otomatis dari penjualan.
  * -------------------------------------------------------------------------
  */
 require_once '../config.php';
 require_once '../includes/auth.php';
 mulai_session();
-$user_role = strtolower($_SESSION['role'] ?? '');
-if (!in_array($user_role, ['admin'])) {
-    $_SESSION['flash'] = [
-        'tipe'  => 'danger',
-        'pesan' => 'Akses ditolak. Hanya Admin yang diizinkan.',
-    ];
-    header('Location: ../index.php');
-    exit;
-}
+// Hanya role Admin dan Owner yang diizinkan
+cek_role(['admin', 'owner']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: ../index.php');

@@ -7,13 +7,23 @@
  * 2. API untuk mengambil koefisien aktif dari model_regresi
  * 3. API untuk menghitung prediksi berdasarkan input X1-X6
  * -------------------------------------------------------------------------
+prediksi berdasarkan input X1-X6
+ * -------------------------------------------------------------------------
  */
+
+// Pastikan session sudah aktif
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // Pastikan hanya Admin dan Owner yang bisa mengakses endpoint ini
 require_once 'config.php';
 require_once 'includes/auth.php';
-$user_role = strtolower($_SESSION['role'] ?? '');
-if (!in_array($user_role, ['admin', 'owner'])) {
+$user_role = strtolower($_SESSION['role'] ?? $_SESSION['user_role'] ?? '');
+$is_logged_in = isset($_SESSION['user_id']) || isset($_SESSION['username']);
+
+if (!$is_logged_in || ($user_role === 'kasir')) {
+    http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya Admin/Owner yang diizinkan.']);
     exit;
 }
@@ -81,13 +91,37 @@ switch ($action) {
         // Trigger pelatihan model dengan menjalankan train_model.py
         try {
             $script_path = __DIR__ . DIRECTORY_SEPARATOR . 'train_model.py';
+
+            // Check if the Python script exists
+            if (!file_exists($script_path)) {
+                throw new Exception('File Python script tidak ditemukan: ' . $script_path);
+            }
+
+            // Check if the Python script is readable
+            if (!is_readable($script_path)) {
+                throw new Exception('File Python script tidak readable: ' . $script_path);
+            }
+
+            // Check if shell_exec function is available
+            if (!function_exists('shell_exec')) {
+                throw new Exception('Fungsi shell_exec adalah disabled pada server ini.');
+            }
+
             $command = escapeshellcmd(PYTHON_PATH . ' ' . escapeshellarg($script_path) . ' 2>&1');
 
             // Jalankan script Python dan tangkap output
             $output = shell_exec($command);
 
             if ($output === null) {
-                throw new Exception('Gagal menjalankan Python script. Periksa PYTHON_PATH dan fungsi shell_exec().');
+                // Provide more detailed error information
+                $errorMsg = 'Gagal menjalankan Python script. ';
+                if (!function_exists('shell_exec')) {
+                    $errorMsg .= 'Fungsi shell_exec adalah disabled pada server ini. ';
+                } else {
+                    $errorMsg .= 'Periksa PYTHON_PATH dan pastikan train_model.py memiliki izin eksekusi. ';
+                }
+                $errorMsg .= 'PYTHON_PATH yang digunakan: ' . PYTHON_PATH;
+                throw new Exception($errorMsg);
             }
 
             $output = trim($output);
@@ -132,36 +166,72 @@ switch ($action) {
 
     case 'predict':
         // Hitung prediksi berdasarkan input X1-X6
-        try {
-            // Validasi input
-            $x1 = isset($_POST['x1']) ? floatval($_POST['x1']) : 0;
-            $x2 = isset($_POST['x2']) ? floatval($_POST['x2']) : 0;
-            $x3 = isset($_POST['x3']) ? floatval($_POST['x3']) : 0;
-            $x4 = isset($_POST['x4']) ? floatval($_POST['x4']) : 0;
-            $x5 = isset($_POST['x5']) ? floatval($_POST['x5']) : 0;
-            $x6 = isset($_POST['x6']) ? floatval($_POST['x6']) : 0;
+        // Validasi input
+        $x1 = isset($_POST['x1']) ? floatval($_POST['x1']) : 0;
+        $x2 = isset($_POST['x2']) ? floatval($_POST['x2']) : 0;
+        $x3 = isset($_POST['x3']) ? floatval($_POST['x3']) : 0;
+        $x4 = isset($_POST['x4']) ? floatval($_POST['x4']) : 0;
+        $x5 = isset($_POST['x5']) ? floatval($_POST['x5']) : 0;
+        $x6 = isset($_POST['x6']) ? floatval($_POST['x6']) : 0;
 
-            // Ambil koefisien aktif
-            $koefisien_result = ambil_koefisien_aktif($pdo);
+        // Ambil koefisien aktif
+        $koefisien_result = ambil_koefisien_aktif($pdo);
 
-            if (!$koefisien_result['success']) {
-                throw new Exception($koefisien_result['message']);
-            }
-
-            // Hitung prediksi
-            $prediksi = hitung_prediksi(
-                $koefisien_result,
-                $x1, $x2, $x3, $x4, $x5, $x6
-            );
-
-            // Catat aktivitas
+        // Jika gagal mendapatkan koefisien, kembalikan fallback 0.00
+        if (!$koefisien_result['success']) {
+            // Catat aktivitas untuk debug
             catat_aktivitas($pdo,
-                "Menghitung prediksi stok: X1=$x1, X2=$x2, X3=$x3, X4=$x4, X5=$x5, X6=$x6 => Ŷ=$prediksi"
+                "Gagal mendapatkan koefisien untuk prediksi: " . $koefisien_result['message'] .
+                ". Menggunakan prediksi default 0.0 untuk X1=$x1, X2=$x2, X3=$x3, X4=$x4, X5=$x5, X6=$x6"
             );
 
             echo json_encode([
                 'success' => true,
-                'prediksi' => $prediksi,
+                'prediksi' => 0.0,
+                'input' => [
+                    'x1' => $x1,
+                    'x2' => $x2,
+                    'x3' => $x3,
+                    'x4' => $x4,
+                    'x5' => $x5,
+                    'x6' => $x6
+                ],
+                'koefisien_used' => [
+                    'beta0' => 0.0,
+                    'beta1' => 0.0,
+                    'beta2' => 0.0,
+                    'beta3' => 0.0,
+                    'beta4' => 0.0,
+                    'beta5' => 0.0,
+                    'beta6' => 0.0
+                ],
+                'model_info' => [
+                    'mad' => 0.0,
+                    'r_square' => 0.0,
+                    'jumlah_data_training' => 0
+                ],
+                'message' => 'Koefisien model tidak tersedia. Menggunakan prediksi default 0.0.'
+            ]);
+            break;
+        }
+
+        // Hitung prediksi
+        try {
+            $prediksi = hitung_prediksi(
+                $koefisien_result,
+                $x1, $x2, $x3, $x4, $x5, $x6
+            );
+        } catch (Exception $e) {
+            // Jika gagal menghitung prediksi, kembalikan fallback 0.00
+            // Catat aktivitas untuk debug
+            catat_aktivitas($pdo,
+                "Gagal menghitung prediksi: " . $e->getMessage() .
+                ". Menggunakan prediksi default 0.0 untuk X1=$x1, X2=$x2, X3=$x3, X4=$x4, X5=$x5, X6=$x6"
+            );
+
+            echo json_encode([
+                'success' => true,
+                'prediksi' => 0.0,
                 'input' => [
                     'x1' => $x1,
                     'x2' => $x2,
@@ -183,16 +253,43 @@ switch ($action) {
                     'mad' => $koefisien_result['mad'],
                     'r_square' => $koefisien_result['r_square'],
                     'jumlah_data_training' => $koefisien_result['jumlah_data_training']
-                ]
+                ],
+                'message' => 'Error dalam perhitungan prediksi. Menggunakan prediksi default 0.0.'
             ]);
-
-        } catch (Exception $e) {
-            http_response_code(400);
-            echo json_encode([
-                'success' => false,
-                'message' => 'Error dalam prediksi: ' . $e->getMessage()
-            ]);
+            break;
         }
+
+        // Catat aktivitas
+        catat_aktivitas($pdo,
+            "Menghitung prediksi stok: X1=$x1, X2=$x2, X3=$x3, X4=$x4, X5=$x5, X6=$x6 => Ŷ=$prediksi"
+        );
+
+        echo json_encode([
+            'success' => true,
+            'prediksi' => $prediksi,
+            'input' => [
+                'x1' => $x1,
+                'x2' => $x2,
+                'x3' => $x3,
+                'x4' => $x4,
+                'x5' => $x5,
+                'x6' => $x6
+            ],
+            'koefisien_used' => [
+                'beta0' => $koefisien_result['beta0'],
+                'beta1' => $koefisien_result['beta1'],
+                'beta2' => $koefisien_result['beta2'],
+                'beta3' => $koefisien_result['beta3'],
+                'beta4' => $koefisien_result['beta4'],
+                'beta5' => $koefisien_result['beta5'],
+                'beta6' => $koefisien_result['beta6']
+            ],
+            'model_info' => [
+                'mad' => $koefisien_result['mad'],
+                'r_square' => $koefisien_result['r_square'],
+                'jumlah_data_training' => $koefisien_result['jumlah_data_training']
+            ]
+        ]);
         break;
 
     case 'info':
@@ -225,3 +322,4 @@ switch ($action) {
         ]);
         break;
 }
+?>

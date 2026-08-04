@@ -22,7 +22,8 @@ from datetime import datetime
 # Konfigurasi koneksi database (sama dengan config.php)
 # -------------------------------------------------------------------------
 DB_CONFIG = {
-    'host': 'localhost',
+    'host': '127.0.0.1',
+    'port': 3306,
     'user': 'root',
     'password': '',
     'database': 'warung_jawa',

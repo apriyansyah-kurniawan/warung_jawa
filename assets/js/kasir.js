@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const selectMenu  = document.getElementById('selectMenu');
     const inputPorsi  = document.getElementById('inputPorsi');
     const totalHarga  = document.getElementById('totalHarga');
+    const btnSetSatu  = document.getElementById('btnSetSatu');
 
     if (!selectMenu || !inputPorsi || !totalHarga) {
         return;
@@ -37,6 +38,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // Pasang event listener pada dropdown menu dan input porsi
     selectMenu.addEventListener('change', hitungTotal);
     inputPorsi.addEventListener('input', hitungTotal);
+
+    // Tambah event listener untuk tombol "Set to 1"
+    if (btnSetSatu) {
+        btnSetSatu.addEventListener('click', function() {
+            inputPorsi.value = 1;
+            hitungTotal();
+        });
+    }
 
     // Hitung saat halaman pertama kali dimuat
     hitungTotal();

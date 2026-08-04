@@ -14,11 +14,22 @@ document.addEventListener('DOMContentLoaded', function () {
     const loadingIndicator = document.getElementById('loadingIndicator');
     const errorBox = document.getElementById('errorBox');
     const hasilPrediksi = document.getElementById('hasilPrediksi');
+    const chartContainer = document.getElementById('chartContainer');
+
+    // Create notification element for insufficient data if not exists
+    let infoNotifikasi = document.getElementById('infoNotifikasi');
+    if (!infoNotifikasi) {
+        infoNotifikasi = document.createElement('div');
+        infoNotifikasi.id = 'infoNotifikasi';
+        infoNotifikasi.className = 'alert alert-info mt-3';
+        chartContainer.parentNode.insertBefore(infoNotifikasi, chartContainer.nextSibling);
+    }
 
     btnPrediksi.addEventListener('click', () => jalankanPrediksi(selectBahan.value));
 
     function jalankanPrediksi(namaBahan) {
         errorBox.classList.add('d-none');
+        infoNotifikasi.classList.add('d-none');
         loadingIndicator.classList.remove('d-none');
         btnPrediksi.disabled = true;
 
@@ -28,8 +39,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 loadingIndicator.classList.add('d-none');
                 btnPrediksi.disabled = false;
                 if (!data.success) { tampilkanError(data.message); return; }
-                renderGrafik(data);
-                renderRingkasanTeks(data);
+                const namaBahanFromData = data.nama_bahan || namaBahan || 'Bahan Baku';
+                const satuan = data.satuan || 'Kg';
+                renderGrafik(data, namaBahanFromData, satuan);
+                renderRingkasanTeks(data, namaBahanFromData, satuan);
+                // Check insufficient historical data (need at least 2 points for regression)
+                if ((data.historical_x || []).length < 2) {
+                    tampilkanNotifikasiKurangData(namaBahanFromData);
+                } else {
+                    sembunyikanNotifikasi();
+                }
             })
             .catch(err => {
                 loadingIndicator.classList.add('d-none');
@@ -43,9 +62,17 @@ document.addEventListener('DOMContentLoaded', function () {
         errorBox.classList.remove('d-none');
     }
 
-    function renderGrafik(data) {
-        const labels = data.historical_x.concat([data.next_week_index]);
-        const satuan = data.satuan || 'Kg';
+    function tampilkanNotifikasiKurangData(namaBahan) {
+        infoNotifikasi.innerHTML = `Data historis stok keluar untuk bahan <strong>${namaBahan}</strong> belum mencukupi (minimal 2 minggu transaksi) untuk membentuk garis tren regresi.`;
+        infoNotifikasi.classList.remove('d-none');
+    }
+
+    function sembunyikanNotifikasi() {
+        infoNotifikasi.classList.add('d-none');
+    }
+
+    function renderGrafik(data, namaBahan, satuan) {
+        const labels = (data.historical_x || []).concat([data.next_week_index ?? 'Minggu Depan']);
         const ctx = document.getElementById('grafikPrediksi').getContext('2d');
 
         if (chartInstance) chartInstance.destroy();
@@ -56,8 +83,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 labels,
                 datasets: [
                     {
-                        label: 'Pemakaian Aktual (' + data.nama_bahan + ')',
-                        data: data.historical_y.concat([null]),
+                        label: 'Pemakaian Aktual (' + namaBahan + ')',
+                        data: (data.historical_y || []).concat([null]),
                         borderColor: CHART_COLORS.actual.line,
                         backgroundColor: CHART_COLORS.actual.fill,
                         borderWidth: 2.5, tension: 0.35, pointRadius: 5,
@@ -65,13 +92,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     },
                     {
                         label: 'Garis Regresi Linear',
-                        data: data.regression_line_y.concat([data.forecasted_val]),
+                        data: (data.regression_line_y || []).concat([data.forecasted_val ?? 0]),
                         borderColor: CHART_COLORS.regression.line,
                         borderDash: [8, 4], borderWidth: 2, pointRadius: 0, tension: 0,
                     },
                     {
                         label: 'Prediksi Minggu Depan',
-                        data: data.historical_x.map(() => null).concat([data.forecasted_val]),
+                        data: (data.historical_x || []).map(() => null).concat([data.forecasted_val ?? 0]),
                         borderColor: CHART_COLORS.forecast.line,
                         backgroundColor: CHART_COLORS.forecast.fill,
                         pointRadius: 10, pointStyle: 'star', showLine: false,
@@ -85,7 +112,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 plugins: {
                     title: {
                         display: true,
-                        text: 'Prediksi Kebutuhan Stok — ' + data.nama_bahan,
+                        text: 'Prediksi Kebutuhan Stok — ' + namaBahan,
                         font: { size: 16, weight: '600' },
                         color: '#1a1d21',
                     },
@@ -118,13 +145,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function renderRingkasanTeks(data) {
-        const satuan = data.satuan || 'Kg';
+    function renderRingkasanTeks(data, namaBahan, satuan) {
         hasilPrediksi.innerHTML =
             '<div class="p-3 rounded-3" style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5)">' +
-            '<h5 class="mb-2">Prediksi <strong>' + data.nama_bahan + '</strong> — ' + data.next_week_index + '</h5>' +
-            '<span class="display-6 fw-bold text-success">' + data.forecasted_val + ' ' + satuan + '</span>' +
-            '<div class="mt-2"><span class="badge bg-warning text-dark">MAD: ' + data.mad_error + '</span></div>' +
-            '<p class="text-muted mt-2 mb-0 small">Y\' = ' + data.koefisien_a + ' + (' + data.koefisien_b + ' × X)</p></div>';
+            '<h5 class="mb-2">Prediksi <strong>' + namaBahan + '</strong> — ' + (data.next_week_index ?? 'Minggu Depan') + '</h5>' +
+            '<span class="display-6 fw-bold text-success">' + (data.forecasted_val ?? 0) + ' ' + satuan + '</span>' +
+            '<div class="mt-2"><span class="badge bg-warning text-dark">MAD: ' + (data.mad_error ?? 0) + '</span></div>' +
+            '<p class="text-muted mt-2 mb-0 small">Y\' = ' + (data.koefisien_a ?? 0) + ' + (' + (data.koefisien_b ?? 0) + ' × X)</p></div>';
     }
 });

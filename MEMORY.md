@@ -1,0 +1,2 @@
+- [Fixed admin/access issues for training model and menu/stok actions](fix_admin_access.md) — Fixed session role checking in process_predict.php, updated AJAX handlers for menu/stok to allow admin/owner, fixed button state reset on error
+- [Fixed Python script execution issues in model training](fix_python_path.md) — Fixed PYTHON_PATH configuration with auto-detection, added pre-flight checks in process_predict.py for train_model.py execution

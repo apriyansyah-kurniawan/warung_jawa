@@ -112,9 +112,12 @@ document.getElementById('btnLatihModel')?.addEventListener('click', function() {
         statusEl.innerHTML = '<span class="badge bg-danger">Terjadi kesalahan</span>';
         console.error('Error:', error);
         alert('Terjadi kesalahan saat menghubungi server');
+        // Immediately reset button text on error
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-brain me-2"></i> Latih Model / Update Prediksi';
     })
     .finally(() => {
-        // Re-enable button after a delay
+        // Re-enable button after a delay (for success case)
         setTimeout(() => {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-brain me-2"></i> Latih Model / Update Prediksi';

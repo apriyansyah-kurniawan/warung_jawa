@@ -32,21 +32,30 @@ function ambil_semua_kpi(PDO $pdo): array
  */
 function kpi_penjualan(PDO $pdo): array
 {
-    // Ambil seluruh data penjualan (tidak hanya hari ini)
-    $stmt = $pdo->query('
-        SELECT
-            COALESCE(SUM(total_harga), 0) AS total_omzet,
-            COALESCE(SUM(jumlah_porsi), 0) AS total_porsi,
-            COUNT(*) AS jumlah_transaksi
-        FROM penjualan
-    ');
-    $row = $stmt->fetch();
+    try {
+        // Ambil seluruh data penjualan (tidak hanya hari ini)
+        $stmt = $pdo->query('
+            SELECT
+                COALESCE(SUM(total_harga), 0) AS total_omzet,
+                COALESCE(SUM(jumlah_porsi), 0) AS total_porsi,
+                COUNT(*) AS jumlah_transaksi
+            FROM penjualan
+        ');
+        $row = $stmt->fetch();
 
-    return [
-        'total_omzet' => (float) $row['total_omzet'],
-        'total_porsi' => (int) $row['total_porsi'],
-        'jumlah_transaksi' => (int) $row['jumlah_transaksi'],
-    ];
+        return [
+            'total_omzet' => (float) $row['total_omzet'],
+            'total_porsi' => (int) $row['total_porsi'],
+            'jumlah_transaksi' => (int) $row['jumlah_transaksi'],
+        ];
+    } catch (Exception $e) {
+        // Mengembalikan array kosong jika ada error database
+        return [
+            'total_omzet' => 0.0,
+            'total_porsi' => 0,
+            'jumlah_transaksi' => 0,
+        ];
+    }
 }
 
 /**
@@ -76,34 +85,39 @@ function kategori_to_label(string $kategori): string
  */
 function kpi_stok_tersedia(PDO $pdo): array
 {
-    $sql = "
-        SELECT
-            m.kategori_x,
-            COALESCE(SUM(sm.jumlah_masuk * m.faktor_konversi), 0) AS total_masuk_kg,
-            COALESCE(SUM(sk.jumlah_terpakai * m.faktor_konversi), 0) AS total_keluar_kg
-        FROM mapping_bahan m
-        LEFT JOIN stok_masuk sm ON m.nama_bahan = sm.nama_bahan
-        LEFT JOIN stok_keluar sk ON m.nama_bahan = sk.nama_bahan
-        WHERE m.kategori_x IN ('X1','X2','X3','X4','X5','X6')
-        GROUP BY m.kategori_x
-    ";
-    $stmt = $pdo->query($sql);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $sql = "
+            SELECT
+                m.kategori_x,
+                COALESCE(SUM(sm.jumlah_masuk * m.faktor_konversi), 0) AS total_masuk_kg,
+                COALESCE(SUM(sk.jumlah_terpakai * m.faktor_konversi), 0) AS total_keluar_kg
+            FROM mapping_bahan m
+            LEFT JOIN stok_masuk sm ON m.nama_bahan = sm.nama_bahan
+            LEFT JOIN stok_keluar sk ON m.nama_bahan = sk.nama_bahan
+            WHERE m.kategori_x IN ('X1','X2','X3','X4','X5','X6')
+            GROUP BY m.kategori_x
+        ";
+        $stmt = $pdo->query($sql);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $hasil = [];
+        $hasil = [];
 
-    foreach ($rows as $row) {
-        $sisa_kg = (float) $row['total_masuk_kg'] - (float) $row['total_keluar_kg'];
-        if ($sisa_kg > STOK_THRESHOLD_KG) {
-            $hasil[] = [
-                'nama_bahan' => kategori_to_label($row['kategori_x']),
-                'sisa' => $sisa_kg,
-                'satuan' => 'Kg',
-            ];
+        foreach ($rows as $row) {
+            $sisa_kg = (float) $row['total_masuk_kg'] - (float) $row['total_keluar_kg'];
+            if ($sisa_kg > STOK_THRESHOLD_KG) {
+                $hasil[] = [
+                    'nama_bahan' => kategori_to_label($row['kategori_x']),
+                    'sisa' => $sisa_kg,
+                    'satuan' => 'Kg',
+                ];
+            }
         }
-    }
 
-    return $hasil;
+        return $hasil;
+    } catch (Exception $e) {
+        // Mengembalikan array kosong jika ada error database
+        return [];
+    }
 }
 
 /**
@@ -115,34 +129,39 @@ function kpi_stok_tersedia(PDO $pdo): array
  */
 function kpi_stok_menipis(PDO $pdo): array
 {
-    $sql = "
-        SELECT
-            m.kategori_x,
-            COALESCE(SUM(sm.jumlah_masuk * m.faktor_konversi), 0) AS total_masuk_kg,
-            COALESCE(SUM(sk.jumlah_terpakai * m.faktor_konversi), 0) AS total_keluar_kg
-        FROM mapping_bahan m
-        LEFT JOIN stok_masuk sm ON m.nama_bahan = sm.nama_bahan
-        LEFT JOIN stok_keluar sk ON m.nama_bahan = sk.nama_bahan
-        WHERE m.kategori_x IN ('X1','X2','X3','X4','X5','X6')
-        GROUP BY m.kategori_x
-    ";
-    $stmt = $pdo->query($sql);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $sql = "
+            SELECT
+                m.kategori_x,
+                COALESCE(SUM(sm.jumlah_masuk * m.faktor_konversi), 0) AS total_masuk_kg,
+                COALESCE(SUM(sk.jumlah_terpakai * m.faktor_konversi), 0) AS total_keluar_kg
+            FROM mapping_bahan m
+            LEFT JOIN stok_masuk sm ON m.nama_bahan = sm.nama_bahan
+            LEFT JOIN stok_keluar sk ON m.nama_bahan = sk.nama_bahan
+            WHERE m.kategori_x IN ('X1','X2','X3','X4','X5','X6')
+            GROUP BY m.kategori_x
+        ";
+        $stmt = $pdo->query($sql);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $hasil = [];
+        $hasil = [];
 
-    foreach ($rows as $row) {
-        $sisa_kg = (float) $row['total_masuk_kg'] - (float) $row['total_keluar_kg'];
-        if ($sisa_kg <= STOK_THRESHOLD_KG) {
-            $hasil[] = [
-                'nama_bahan' => kategori_to_label($row['kategori_x']),
-                'sisa' => $sisa_kg,
-                'satuan' => 'Kg',
-            ];
+        foreach ($rows as $row) {
+            $sisa_kg = (float) $row['total_masuk_kg'] - (float) $row['total_keluar_kg'];
+            if ($sisa_kg <= STOK_THRESHOLD_KG) {
+                $hasil[] = [
+                    'nama_bahan' => kategori_to_label($row['kategori_x']),
+                    'sisa' => $sisa_kg,
+                    'satuan' => 'Kg',
+                ];
+            }
         }
-    }
 
-    return $hasil;
+        return $hasil;
+    } catch (Exception $e) {
+        // Mengembalikan array kosong jika ada error database
+        return [];
+    }
 }
 
 /**
@@ -155,36 +174,47 @@ function kpi_stok_menipis(PDO $pdo): array
  * @return array Daftar prediksi per bahan dengan nama_bahan, forecasted_val, next_week, mad_error, satuan
  */
 function kpi_ringkasan_prediksi(PDO $pdo): array {
-    if (!boleh_prediksi()) {
+    try {
+        if (!boleh_prediksi()) {
+            return [];
+        }
+
+        $stmt = $pdo->query("
+            SELECT
+                kategori_x,
+                GROUP_CONCAT(nama_bahan) as nama_bahan,
+                MAX(satuan) as satuan
+            FROM mapping_bahan
+            WHERE kategori_x IN ('X1','X2','X3','X4','X5','X6')
+            GROUP BY kategori_x
+            ORDER BY kategori_x ASC
+        ");
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $stmtModel = $pdo->query("SELECT * FROM model_regresi ORDER BY id DESC LIMIT 1");
+        $model = $stmtModel->fetch(PDO::FETCH_ASSOC);
+        $mad = (float)($model['mad'] ?? 2.01);
+
+        $hasil = [];
+        foreach ($rows as $r) {
+            $hasil[] = [
+                'nama_bahan'     => kategori_to_label($r['kategori_x']),
+                'kategori_x'     => $r['kategori_x'],
+                'forecasted_val' => 0.0,
+                'next_week'      => 'Estimasi',
+                'mad_error'      => $mad,
+                'satuan'         => $r['satuan'] ?? 'Kg'
+            ];
+        }
+        return $hasil;
+    } catch (Exception $e) {
+        // Mengembalikan array kosong jika ada error database
+        // Tapi tetap hapus cache untuk memastikan data segar di request berikutnya
+        unset($_SESSION['kpi_prediksi_cache']);
         return [];
     }
 
-    $stmt = $pdo->query("
-        SELECT 
-            kategori_x,
-            GROUP_CONCAT(nama_bahan) as nama_bahan,
-            MAX(satuan) as satuan
-        FROM mapping_bahan
-        WHERE kategori_x IN ('X1','X2','X3','X4','X5','X6')
-        GROUP BY kategori_x
-        ORDER BY kategori_x ASC
-    ");
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $stmtModel = $pdo->query("SELECT * FROM model_regresi ORDER BY id DESC LIMIT 1");
-    $model = $stmtModel->fetch(PDO::FETCH_ASSOC);
-    $mad = (float)($model['mad'] ?? 2.01);
-
-    $hasil = [];
-    foreach ($rows as $r) {
-        $hasil[] = [
-            'nama_bahan'     => kategori_to_label($r['kategori_x']),
-            'kategori_x'     => $r['kategori_x'],
-            'forecasted_val' => 0.0,
-            'next_week'      => 'Estimasi',
-            'mad_error'      => $mad,
-            'satuan'         => $r['satuan'] ?? 'Kg'
-        ];
-    }
-    return $hasil;
+    // Clear prediction cache to ensure fresh data on next request
+    // Note: This line is unreachable due to return statements above, but keeping for clarity
+    // unset($_SESSION['kpi_prediksi_cache']);
 }

@@ -5,7 +5,18 @@ define('DB_NAME', 'warung_jawa');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 
-define('PYTHON_PATH', __DIR__ . '/path/to/venv/bin/python3');
+if (!defined('PYTHON_PATH')) {
+    // Cek lokasi python3 di sistem
+    if (file_exists('/opt/homebrew/bin/python3')) {
+        define('PYTHON_PATH', '/opt/homebrew/bin/python3');
+    } elseif (file_exists('/usr/local/bin/python3')) {
+        define('PYTHON_PATH', '/usr/local/bin/python3');
+    } elseif (file_exists('/usr/bin/python3')) {
+        define('PYTHON_PATH', '/usr/bin/python3');
+    } else {
+        define('PYTHON_PATH', 'python3');
+    }
+}
 define('DAFTAR_SATUAN', ['Kg', 'Ons', 'Ikat', 'Liter', 'Pcs']);
 
 /** Timeout session: 15 menit tanpa aktivitas (dalam detik) */
