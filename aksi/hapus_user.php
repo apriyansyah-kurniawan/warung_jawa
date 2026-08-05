@@ -5,55 +5,78 @@
  * Admin menghapus user (tidak boleh hapus diri sendiri).
  * -------------------------------------------------------------------------
  */
-require_once '../config.php';
-require_once '../includes/auth.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../includes/auth.php';
 mulai_session();
 $user_role = strtolower($_SESSION['role'] ?? '');
 if (!in_array($user_role, ['admin'])) {
     $_SESSION['flash'] = [
-        'tipe'  => 'danger',
-        'pesan' => 'Akses ditolak. Hanya Admin yang diizinkan.',
+        'tipe' => 'danger',
+        'pesan' => 'Akses ditolak. Hanya Admin yang diizinkan.'
     ];
     header('Location: ../index.php');
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: ../index.php');
+// Get target user ID from GET or POST
+$id_target_raw = $_GET['id'] ?? $_POST['id'] ?? null;
+
+// Validate ID target
+if ($id_target_raw === null || $id_target_raw === '' || !is_numeric($id_target_raw) || (int)$id_target_raw <= 0) {
+    $_SESSION['flash'] = [
+        'tipe' => 'danger',
+        'pesan' => 'ID User tidak valid.'
+    ];
+    header('Location: ../index.php?page=user');
     exit;
 }
+$id_target = (int)$id_target_raw;
 
-$id_hapus = (int) ($_POST['id'] ?? 0);
-$id_login = (int) $_SESSION['user_id'];
-
-if ($id_hapus <= 0) {
-    $_SESSION['flash'] = ['tipe' => 'danger', 'pesan' => 'ID user tidak valid.'];
-    header('Location: ../index.php');
+// Get current user ID
+$current_user_id_raw = $_SESSION['user_id'] ?? $_SESSION['id'] ?? null;
+if ($current_user_id_raw === null || $current_user_id_raw === '' || !is_numeric($current_user_id_raw)) {
+    // Should not happen if logged in, but handle gracefully
+    $_SESSION['flash'] = [
+        'tipe' => 'danger',
+        'pesan' => 'Sesi tidak valid. Silakan login kembali.'
+    ];
+    header('Location: ../login.php');
     exit;
 }
+$current_user_id = (int)$current_user_id_raw;
 
-if ($id_hapus === $id_login) {
-    $_SESSION['flash'] = ['tipe' => 'danger', 'pesan' => 'Tidak dapat menghapus akun yang sedang login.'];
-    header('Location: ../index.php');
+// Prevent self-deletion
+if ($id_target === $current_user_id) {
+    $_SESSION['flash'] = [
+        'tipe' => 'danger',
+        'pesan' => 'Tidak dapat menghapus akun yang sedang digunakan!'
+    ];
+    header('Location: ../index.php?page=user');
     exit;
 }
 
 try {
     $stmt = $pdo->prepare('DELETE FROM users WHERE id = :id');
-    $stmt->execute(['id' => $id_hapus]);
+    $stmt->execute(['id' => $id_target]);
 
     if ($stmt->rowCount() > 0) {
-        catat_aktivitas($pdo, 'Hapus user ID ' . $id_hapus);
-        $_SESSION['flash'] = ['tipe' => 'success', 'pesan' => 'User berhasil dihapus.'];
+        catat_aktivitas($pdo, 'Hapus user ID ' . $id_target);
+        $_SESSION['flash'] = [
+            'tipe' => 'success',
+            'pesan' => 'User berhasil dihapus.'
+        ];
     } else {
-        $_SESSION['flash'] = ['tipe' => 'danger', 'pesan' => 'User tidak ditemukan.'];
+        $_SESSION['flash'] = [
+            'tipe' => 'danger',
+            'pesan' => 'User tidak ditemukan.'
+        ];
     }
 } catch (PDOException $e) {
     $_SESSION['flash'] = [
-        'tipe'  => 'danger',
-        'pesan' => 'User tidak dapat dihapus karena masih memiliki data transaksi.',
+        'tipe' => 'danger',
+        'pesan' => 'User tidak dapat dihapus karena masih memiliki data transaksi.'
     ];
 }
 
-header('Location: ../index.php');
+header('Location: ../index.php?page=user');
 exit;

@@ -61,12 +61,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="login-body">
             <?php if ($timeout): ?>
-                <div class="alert alert-warning">
-                    <i class="bi bi-clock-history"></i> Sesi Anda telah berakhir. Silakan login kembali.
-                </div>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Sesi Habis',
+                            text: 'Sesi Anda telah berakhir. Silakan login kembali.',
+                            confirmButtonColor: '#dc3545'
+                        });
+                    });
+                </script>
             <?php endif; ?>
             <?php if ($error): ?>
-                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: <?= json_encode($error) ?>,
+                            confirmButtonColor: '#dc3545'
+                        });
+                    });
+                </script>
             <?php endif; ?>
 
             <form method="POST" action="login.php">

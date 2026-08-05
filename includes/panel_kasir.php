@@ -296,16 +296,32 @@ function bindEvents() {
 
     // Tombol Bersihkan Keranjang
     document.getElementById('btnClearCart').addEventListener('click', function () {
-        if (confirm('Yakin ingin bersihkan keranjang?')) {
-            keranjang = [];
-            renderCart();
-        }
+        Swal.fire({
+            title: 'Apakah Anda yakin?',
+            text: "Keranjang akan bersih dan tindakan ini tidak dapat dibatalkan!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Ya, Bersihkan!',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                keranjang = [];
+                renderCart();
+            }
+        });
     });
 
     // Tombol Bayar (Checkout)
     document.getElementById('btnCheckout').addEventListener('click', function () {
         if (keranjang.length === 0) {
-            alert('Keranjang masih kosong! Tambahkan minimal satu menu.');
+            Swal.fire({
+                icon: 'warning',
+                title: 'Keranjang Kosong',
+                text: 'Keranjang masih kosong! Tambahkan minimal satu menu.',
+                confirmButtonColor: '#ffc107'
+            });
             return;
         }
         const orderType = document.querySelector('input[name="orderType"]:checked').value; // dinein atau takeaway
@@ -338,12 +354,22 @@ function bindEvents() {
                     renderCart();
                 }, { once: true });
             } else {
-                alert('Gagal melakukan transaksi: ' + (data.message || 'Error tidak diketahui'));
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Transaksi Gagal',
+                    text: 'Gagal melakukan transaksi: ' + (data.message || 'Error tidak diketahui'),
+                    confirmButtonColor: '#dc3545'
+                });
             }
         })
         .catch(err => {
             console.error(err);
-            alert('Terjadi kesalahan jaringan.');
+            Swal.fire({
+                icon: 'error',
+                title: 'Kesalahan Jaringan',
+                text: 'Terjadi kesalahan jaringan.',
+                confirmButtonColor: '#dc3545'
+            });
         });
     });
 }

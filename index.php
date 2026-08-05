@@ -9,7 +9,23 @@ require_once 'includes/kpi.php';
 cek_login();
 
 $judul_halaman = 'Dashboard';
-$menu_aktif    = 'beranda';
+// Determine active menu from page parameter
+$page = $_GET['page'] ?? '';
+switch ($page) {
+    case 'user':
+    case 'users':
+        $menu_aktif = 'users';
+        break;
+    case 'menu':
+        // Menu management is inside admin panel, not a separate sidebar item.
+        // We'll default to 'beranda' or maybe set to something else.
+        // Since there's no sidebar item for menu, we can set to empty and handle via JS to scroll.
+        $menu_aktif = 'beranda'; // fallback
+        break;
+    default:
+        $menu_aktif = 'beranda';
+        break;
+}
 $flash         = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
@@ -20,10 +36,18 @@ require_once 'includes/header.php';
 ?>
 
 <?php if ($flash): ?>
-    <div class="alert alert-<?= htmlspecialchars($flash['tipe']) ?> alert-dismissible fade show">
-        <?= htmlspecialchars($flash['pesan']) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        Swal.fire({
+            icon: '<?= htmlspecialchars($flash['tipe'] === 'danger' ? 'error' : $flash['tipe']) ?>',
+            title: '<?= htmlspecialchars($flash['tipe'] === 'danger' ? 'Gagal' : ucfirst($flash['tipe'])) ?>',
+            text: '<?= addslashes(htmlspecialchars($flash['pesan'], ENT_QUOTES)) ?>',
+            confirmButtonColor: '#198754',
+            timer: 2500,
+            timerProgressBar: true
+        });
+    });
+</script>
 <?php endif; ?>
 
 <!-- 4 KPI Cards — langsung tampil setelah login -->
@@ -32,7 +56,7 @@ require_once 'includes/header.php';
 <?php
 if (adalah_kasir()) {
     require 'includes/panel_kasir.php';
-} elseif (adalah_admin()) {
+} elseif (adalah_admin() || adalah_owner()) {
     require 'includes/widget_aktivitas.php';
     require 'includes/panel_admin.php';
     // Teknis section for Admin
@@ -63,11 +87,17 @@ if (adalah_kasir()) {
         </div>
     </section>
     <?php
-} elseif (adalah_owner()) {
-    require 'includes/widget_aktivitas.php';
-    require 'includes/panel_owner.php';
 } else {
-    echo '<div class="alert alert-warning">Role tidak dikenali.</div>';
+    echo '<script>
+        document.addEventListener("DOMContentLoaded", function() {
+            Swal.fire({
+                icon: "warning",
+                title: "Perhatian",
+                text: "Role tidak dikenali.",
+                confirmButtonColor: "#dc3545"
+            });
+        });
+      </script>';
 }
 ?>
 
@@ -96,7 +126,12 @@ document.getElementById('btnLatihModel')?.addEventListener('click', function() {
             statusEl.innerHTML = '<span class="badge bg-success">Model berhasil dilatih!</span>';
             // Show success message
             if (data.data && data.data.message) {
-                alert('Model berhasil dilatih: ' + data.data.message);
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Berhasil!',
+                    text: 'Model berhasil dilatih: ' + data.data.message,
+                    confirmButtonColor: '#198754'
+                });
             }
 
             // Optionally, reload prediction data
@@ -105,13 +140,23 @@ document.getElementById('btnLatihModel')?.addEventListener('click', function() {
             }, 2000);
         } else {
             statusEl.innerHTML = '<span class="badge bg-danger">Gagal melatih model</span>';
-            alert('Error: ' + (data.message || 'Unknown error'));
+            Swal.fire({
+                icon: 'error',
+                title: 'Gagal!',
+                text: 'Error: ' + (data.message || 'Unknown error'),
+                confirmButtonColor: '#dc3545'
+            });
         }
     })
     .catch(error => {
         statusEl.innerHTML = '<span class="badge bg-danger">Terjadi kesalahan</span>';
         console.error('Error:', error);
-        alert('Terjadi kesalahan saat menghubungi server');
+        Swal.fire({
+            icon: 'error',
+            title: 'Kesalahan!',
+            text: 'Terjadi kesalahan saat menghubungi server',
+            confirmButtonColor: '#dc3545'
+        });
         // Immediately reset button text on error
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-brain me-2"></i> Latih Model / Update Prediksi';

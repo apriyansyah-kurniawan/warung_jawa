@@ -92,9 +92,10 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                             <td class="text-center">
                                 <?php if ((int) $user['id'] !== (int) $_SESSION['user_id']): ?>
                                     <form method="POST" action="aksi/hapus_user.php" class="d-inline"
-                                          onsubmit="return confirmDelete(this, 'Hapus user ini?')">
+                                          onsubmit="return confirm('Hapus user ini?')">
                                         <input type="hidden" name="id" value="<?= $user['id'] ?>">
                                         <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                                    </form>
                                 <?php else: ?>
                                     <span class="text-muted small">(Anda)</span>
                                 <?php endif; ?>
@@ -193,7 +194,7 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     <form method="POST" action="aksi/menu.php" class="d-inline"
-                                          onsubmit="return confirmDelete(this, 'Hapus menu <?= htmlspecialchars($menu['nama_menu']) ?>?')">
+                                          onsubmit="return confirm('Hapus menu <?= htmlspecialchars($menu['nama_menu']) ?>?')">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= $menu['id'] ?>">
                                         <button type="submit" class="btn btn-outline-danger btn-sm">
@@ -606,21 +607,4 @@ document.getElementById('modalEditMenu')?.addEventListener('show.bs.modal', func
         kategoriSpan.textContent = '-';
     }
 });
-function confirmDelete(form, message) {
-    Swal.fire({
-        title: 'Apakah Anda yakin?',
-        text: message,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc3545',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: 'Ya, Hapus!',
-        cancelButtonText: 'Batal'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            form.submit();
-        }
-    });
-    return false;
-}
 </script>

@@ -4,14 +4,27 @@
  */
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/auth.php';
-$user_role = strtolower($_SESSION['role'] ?? '');
-if (!in_array($user_role, ['admin', 'owner'])) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya Admin/Owner yang diizinkan.']);
-    exit;
+
+// Helper to check if request is AJAX
+function isAjax(): bool {
+    return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 }
 
-header('Content-Type: application/json');
+// Role check: only admin and owner allowed
+$user_role = strtolower($_SESSION['role'] ?? '');
+if (!in_array($user_role, ['admin', 'owner'])) {
+    if (isAjax()) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Akses ditolak.']);
+    } else {
+        $_SESSION['flash'] = [
+            'tipe' => 'danger',
+            'pesan' => 'Akses ditolak. Hanya Admin/Owner yang diizinkan.'
+        ];
+        header('Location: ../index.php');
+    }
+    exit;
+}
 
 // Get request method and action
 $method = $_SERVER['REQUEST_METHOD'];
@@ -19,8 +32,16 @@ $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 // Validate action
 if (!in_array($action, ['create', 'update', 'delete'])) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Aksi tidak valid']);
+    if (isAjax()) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Aksi tidak valid']);
+    } else {
+        $_SESSION['flash'] = [
+            'tipe' => 'danger',
+            'pesan' => 'Aksi tidak valid'
+        ];
+        header('Location: ../index.php');
+    }
     exit;
 }
 
@@ -67,11 +88,20 @@ try {
             // Log activity
             catat_aktivitas($pdo, "Menambah menu: $nama (Harga: Rp " . number_format($harga,0,',','.') . ")");
 
-            echo json_encode([
-                'success' => true,
-                'message' => 'Menu berhasil ditambahkan',
-                'data' => ['id' => $id]
-            ]);
+            if (isAjax()) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Menu berhasil ditambahkan',
+                    'data' => ['id' => $id]
+                ]);
+            } else {
+                $_SESSION['flash'] = [
+                    'tipe' => 'success',
+                    'pesan' => 'Menu berhasil ditambahkan'
+                ];
+                header('Location: ../index.php?page=menu');
+                exit;
+            }
             break;
 
         case 'update':
@@ -128,10 +158,19 @@ try {
             // Log activity
             catat_aktivitas($pdo, "Mengupdate menu ID $id: $nama");
 
-            echo json_encode([
-                'success' => true,
-                'message' => 'Menu berhasil diperbarui'
-            ]);
+            if (isAjax()) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Menu berhasil diperbarui'
+                ]);
+            } else {
+                $_SESSION['flash'] = [
+                    'tipe' => 'success',
+                    'pesan' => 'Menu berhasil diperbarui'
+                ];
+                header('Location: ../index.php?page=menu');
+                exit;
+            }
             break;
 
         case 'delete':
@@ -158,22 +197,49 @@ try {
             // Log activity
             catat_aktivitas($pdo, "Menghapus menu: " . $menu['nama_menu']);
 
-            echo json_encode([
-                'success' => true,
-                'message' => 'Menu berhasil dihapus'
-            ]);
+            if (isAjax()) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Menu berhasil dihapus'
+                ]);
+            } else {
+                $_SESSION['flash'] = [
+                    'tipe' => 'success',
+                    'pesan' => 'Menu berhasil dihapus'
+                ];
+                header('Location: ../index.php?page=menu');
+                exit;
+            }
             break;
     }
 } catch (Exception $e) {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => $e->getMessage()
-    ]);
+    if (isAjax()) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => $e->getMessage()
+        ]);
+    } else {
+        $_SESSION['flash'] = [
+            'tipe' => 'danger',
+            'pesan' => $e->getMessage()
+        ];
+        header('Location: ../index.php?page=menu');
+        exit;
+    }
 } catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Database error: ' . $e->getMessage()
-    ]);
+    if (isAjax()) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Database error: ' . $e->getMessage()
+        ]);
+    } else {
+        $_SESSION['flash'] = [
+            'tipe' => 'danger',
+            'pesan' => 'Database error: ' . $e->getMessage()
+        ];
+        header('Location: ../index.php?page=menu');
+        exit;
+    }
 }
