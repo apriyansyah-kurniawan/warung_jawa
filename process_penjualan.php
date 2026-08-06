@@ -13,11 +13,16 @@ require_once 'config.php';
 require_once 'includes/auth.php';
 mulai_session();
 
+// Enable error display for debugging (remove in production)
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 header('Content-Type: application/json');
 
 $user_role = strtolower($_SESSION['role'] ?? '');
-if (!in_array($user_role, ['kasir'])) {
-    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya Kasir yang diizinkan.']);
+if (!in_array($user_role, ['kasir', 'admin', 'owner'])) {
+    echo json_encode(['success' => false, 'message' => 'Akses ditolak. Hanya Kasir/Admin/Owner yang diizinkan.']);
     exit;
 }
 
@@ -54,7 +59,7 @@ foreach ($items as $index => $item) {
         exit;
     }
     $item['total_harga'] = $item['jumlah_porsi'] * $item['harga_satuan'];
-    $items[$item_index] = $item; // ensure we have total_harga
+    $items[$index] = $item; // ensure we have total_harga
 }
 
 // Use the same ambil_menu function as insert_penjualan.php
@@ -75,6 +80,7 @@ try {
     ];
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $opsi_pdo);
 } catch (PDOException $e) {
+    http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Koneksi database gagal: ' . $e->getMessage()]);
     exit;
 }
@@ -85,6 +91,7 @@ if ($id_user <= 0) {
     exit;
 }
 
+// Wrap the transaction processing in try-catch to catch Throwable
 try {
     $pdo->beginTransaction();
 
@@ -135,11 +142,16 @@ try {
     // catat_aktivitas($pdo, sprintf('Penjualan multi-item: %d items', count($items)));
 
     echo json_encode(['success' => true, 'message' => 'Transaksi berhasil']);
-} catch (Exception $e) {
+} catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
     error_log("process_penjualan.php error: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Transaksi gagal: ' . $e->getMessage()]);
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Gagal memproses transaksi: ' . $e->getMessage()
+    ]);
+    exit;
 }
 ?>

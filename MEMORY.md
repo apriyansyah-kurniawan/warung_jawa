@@ -1,2 +1,4 @@
 - [Fixed admin/access issues for training model and menu/stok actions](fix_admin_access.md) — Fixed session role checking in process_predict.php, updated AJAX handlers for menu/stok to allow admin/owner, fixed button state reset on error
 - [Fixed Python script execution issues in model training](fix_python_path.md) — Fixed PYTHON_PATH configuration with auto-detection, added pre-flight checks in process_predict.py for train_model.py execution
+- [Restored Prediksi Stok UI for Owner/Admin roles](restored_prediksi_stok_ui.md) — Fixed authentication and sidebar menu to show Prediksi Stok for both Owner and Admin roles
+- [Fixed delete functionality across all modules](fixed_delete_functionality.md) — Updated all hapus_*.php files to support flexible ID parameter reading from GET/POST and added modal initialization for Hapus Stok

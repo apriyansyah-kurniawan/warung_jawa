@@ -94,13 +94,21 @@ $daftar_bahan = $pdo->query('SELECT DISTINCT nama_bahan FROM stok_keluar ORDER B
             </div>
             <div class="card-body p-0">
                 <table class="table table-modern table-sm mb-0">
-                    <thead><tr><th>Tanggal</th><th>Bahan</th><th class="text-end">Jumlah</th></tr></thead>
+                    <thead><tr><th>Tanggal</th><th>Bahan</th><th class="text-end">Jumlah</th><th></th></tr></thead>
                     <tbody>
                         <?php foreach ($log_stok_keluar as $row): ?>
                             <tr>
                                 <td><?= htmlspecialchars($row['tanggal']) ?></td>
                                 <td><?= htmlspecialchars($row['nama_bahan']) ?></td>
                                 <td class="text-end"><?= format_jumlah($row['jumlah_terpakai'], $row['satuan']) ?></td>
+                                <td>
+                                    <button class="btn btn-sm btn-link text-danger p-0" data-bs-toggle="modal"
+                                            data-bs-target="#modalHapusAdmin"
+                                            data-id="<?= $row['id'] ?>"
+                                            data-info="<?= htmlspecialchars($row['nama_bahan']) ?>">
+                                        Hapus
+                                    </button>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -122,6 +130,15 @@ $daftar_bahan = $pdo->query('SELECT DISTINCT nama_bahan FROM stok_keluar ORDER B
                                 <td><?= htmlspecialchars($row['tanggal']) ?></td>
                                 <td><?= htmlspecialchars($row['nama_bahan']) ?></td>
                                 <td class="text-end"><?= format_jumlah($row['jumlah_masuk'], $row['satuan']) ?></td>
+                                <td>
+                                    <button class="btn btn-sm btn-link text-danger p-0" data-bs-toggle="modal"
+                                            data-bs-target="#modalHapusAdmin"
+                                            data-id="<?= $row['id'] ?>"
+                                            data-info="<?= htmlspecialchars($row['nama_bahan']) ?>"
+                                            data-type="stok_masuk">
+                                        Hapus
+                                    </button>
+                                </td>
                             </tr>
                         <?php endforeach; endif; ?>
                     </tbody>
@@ -131,4 +148,26 @@ $daftar_bahan = $pdo->query('SELECT DISTINCT nama_bahan FROM stok_keluar ORDER B
     </div>
 </div>
 
+<script>
+// Initialize Hapus Stok modal for owner panel (if not already initialized by admin panel)
+document.getElementById('modalHapusAdmin')?.addEventListener('show.bs.modal', function (e) {
+    const btn = e.relatedTarget;
+    console.log('Modal triggered by button:', btn);
+    console.log('Button dataset id:', btn.dataset.id);
+    console.log('Button dataset type:', btn.dataset.type);
+
+    // Set the ID value
+    document.getElementById('idHapusAdmin').value = btn.dataset.id;
+    document.getElementById('infoHapusAdmin').textContent = btn.dataset.info;
+
+    // Set the form action based on data type
+    const form = document.querySelector('#modalHapusAdmin form');
+    if (btn.dataset.type === 'stok_masuk') {
+        form.action = 'aksi/hapus_stok_masuk.php';
+    } else {
+        // Default to stok keluar for backward compatibility
+        form.action = 'aksi/hapus_stok.php';
+    }
+});
+</script>
 <?php require __DIR__ . '/panel_prediksi.php'; ?>

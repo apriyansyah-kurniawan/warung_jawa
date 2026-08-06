@@ -18,8 +18,8 @@ if (!in_array($user_role, ['admin'])) {
     exit;
 }
 
-// Get target user ID from GET or POST
-$id_target_raw = $_GET['id'] ?? $_POST['id'] ?? null;
+// Get target user ID from GET or POST with fallback parameter names
+$id_target_raw = $_GET['id'] ?? $_POST['id'] ?? $_GET['id_user'] ?? $_POST['id_user'] ?? null;
 
 // Validate ID target
 if ($id_target_raw === null || $id_target_raw === '' || !is_numeric($id_target_raw) || (int)$id_target_raw <= 0) {

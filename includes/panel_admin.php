@@ -411,7 +411,8 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                                     <button class="btn btn-sm btn-link text-danger p-0" data-bs-toggle="modal"
                                             data-bs-target="#modalHapusAdmin"
                                             data-id="<?= $row['id'] ?>"
-                                            data-info="<?= htmlspecialchars($row['nama_bahan']) ?>">
+                                            data-info="<?= htmlspecialchars($row['nama_bahan']) ?>"
+                                            data-type="stok_keluar">
                                         Hapus
                                     </button>
                                 </td>
@@ -443,7 +444,48 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
 
 <script>
 // Load DataTables CSS and JS dynamically if not already loaded
-if (!$.fn.dataTable) {
+function loadjQueryAndDataTables() {
+    // Load jQuery if not present
+    if (typeof jQuery === 'undefined') {
+        var script = document.createElement('script');
+        script.src = 'https://code.jquery.com/jquery-3.6.0.min.js';
+        script.onload = function() {
+            loadDataTablesPlugin();
+        };
+        document.head.appendChild(script);
+    } else {
+        loadDataTablesPlugin();
+    }
+}
+
+function loadDataTablesPlugin() {
+    if (!jQuery.fn.dataTable) {
+        // Load DataTables CSS
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.type = 'text/css';
+        css.href = 'https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css';
+        document.head.appendChild(css);
+
+        // Load DataTables JS
+        jQuery.getScript("https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js")
+            .done(function() {
+                jQuery.getScript("https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js", function() {
+                    initializeDataTable();
+                });
+            });
+    } else {
+        initializeDataTable();
+    }
+}
+
+// Check if we need to load DataTables (requires jQuery)
+if (typeof jQuery === 'undefined' || !jQuery.fn.dataTable) {
+    loadjQueryAndDataTables();
+} else {
+    initializeDataTable();
+}
+</script>
     // Load DataTables CSS
     $('head').append('<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">');
 
@@ -604,6 +646,27 @@ document.getElementById('modalEditMenu')?.addEventListener('show.bs.modal', func
             });
     } else {
         kategoriSpan.textContent = '-';
+    }
+});
+
+// Initialize Hapus Stok modal
+document.getElementById('modalHapusAdmin')?.addEventListener('show.bs.modal', function (e) {
+    const btn = e.relatedTarget;
+    console.log('Modal triggered by button:', btn);
+    console.log('Button dataset id:', btn.dataset.id);
+    console.log('Button dataset type:', btn.dataset.type);
+
+    // Set the ID value
+    document.getElementById('idHapusAdmin').value = btn.dataset.id;
+    document.getElementById('infoHapusAdmin').textContent = btn.dataset.info;
+
+    // Set the form action based on data type
+    const form = document.querySelector('#modalHapusAdmin form');
+    if (btn.dataset.type === 'stok_masuk') {
+        form.action = 'aksi/hapus_stok_masuk.php';
+    } else {
+        // Default to stok keluar for backward compatibility
+        form.action = 'aksi/hapus_stok.php';
     }
 });
 function confirmDelete(form, message) {

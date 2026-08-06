@@ -12,18 +12,16 @@ mulai_session();
 // Hanya role Admin dan Owner yang diizinkan
 cek_role(['admin', 'owner']);
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: ../index.php');
-    exit;
-}
+// Support both GET and POST for flexibility with fallback parameter names
+$id = $_GET['id'] ?? $_POST['id'] ?? $_GET['id_stok'] ?? $_POST['id_stok'] ?? null;
 
-$id = (int) ($_POST['id'] ?? 0);
-
-if ($id <= 0) {
+// Validate ID target
+if ($id === null || $id === '' || !is_numeric($id) || (int)$id <= 0) {
     $_SESSION['flash'] = ['tipe' => 'danger', 'pesan' => 'ID data tidak valid.'];
     header('Location: ../index.php');
     exit;
 }
+$id = (int)$id;
 
 $stmt = $pdo->prepare('DELETE FROM stok_keluar WHERE id = :id');
 $stmt->execute(['id' => $id]);

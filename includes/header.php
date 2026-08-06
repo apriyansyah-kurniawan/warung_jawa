@@ -36,7 +36,7 @@ $base          = $base ?? '';
                     <i class="bi bi-cart-plus"></i> Input Penjualan
                 </a>
             <?php endif; ?>
-            <?php if (adalah_owner()): ?>
+            <?php if (adalah_owner() || adalah_admin()): ?>
                 <a href="<?= $base ?>index.php#stok-masuk" class="nav-link" data-nav="stok-masuk">
                     <i class="bi bi-box-arrow-in-down"></i> Stok Masuk
                 </a>

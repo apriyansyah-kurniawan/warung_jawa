@@ -174,12 +174,14 @@ try {
             break;
 
         case 'delete':
-            // Delete menu
-            $id = (int)($_POST['id'] ?? 0);
+            // Delete menu - support flexible ID parameter names and methods
+            $id = $_GET['id'] ?? $_POST['id'] ?? $_GET['id_menu'] ?? $_POST['id_menu'] ?? null;
 
-            if ($id <= 0) {
+            // Validate ID target
+            if ($id === null || $id === '' || !is_numeric($id) || (int)$id <= 0) {
                 throw new Exception('ID menu tidak valid');
             }
+            $id = (int)$id;
 
             // Check if menu exists first
             $checkStmt = $pdo->prepare('SELECT nama_menu FROM master_menu WHERE id = :id');

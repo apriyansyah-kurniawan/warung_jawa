@@ -59,29 +59,28 @@ if (adalah_kasir()) {
 } elseif (adalah_admin() || adalah_owner()) {
     require 'includes/widget_aktivitas.php';
     require 'includes/panel_admin.php';
+    require 'includes/panel_owner.php';
     // Teknis section for Admin
     ?>
     <section id="teknis" class="modern-card">
         <div class="card-header">
-            <span><i class="bi bi-cpu"></i> Pengecekan Teknis Engine Python</span>
+            <span><i class="bi bi-cpu"></i> Perhitungan Prediksi Kebutuhan Bahan Baku</span>
         </div>
         <div class="card-body">
             <div class="row g-4">
                 <div class="col-md-6">
                     <button type="button" class="btn btn-primary w-100" id="btnLatihModel">
-                        <i class="bi bi-brain me-2"></i> Latih Model / Update Prediksi
+                        <i class="bi bi-brain me-2"></i> Hitung Prediksi Stok
                     </button>
                 </div>
                 <div class="col-md-6">
                     <div id="statusModel" class="text-end">
-                        <span class="badge bg-secondary">Siap</span>
-                    </div>
+                        </div>
                 </div>
             </div>
             <div class="mt-4">
                 <small class="text-muted">
-                    Model regresi linier bergoda digunakan untuk memprediksi kebutuhan bahan baku
-                    berdasarkan konsumsi historis. Latih model secara berkala untuk akurasi terbaik.
+                    Model regresi linier berganda digunakan untuk memprediksi kebutuhan bahan baku berdasarkan data konsumsi historis.
                 </small>
             </div>
         </div>
@@ -159,13 +158,13 @@ document.getElementById('btnLatihModel')?.addEventListener('click', function() {
         });
         // Immediately reset button text on error
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-brain me-2"></i> Latih Model / Update Prediksi';
+        btn.innerHTML = '<i class="bi bi-brain me-2"></i> Hitung Prediksi Stok';
     })
     .finally(() => {
         // Re-enable button after a delay (for success case)
         setTimeout(() => {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-brain me-2"></i> Latih Model / Update Prediksi';
+            btn.innerHTML = '<i class="bi bi-brain me-2"></i> Hitung Prediksi Stok';
         }, 3000);
     });
 });

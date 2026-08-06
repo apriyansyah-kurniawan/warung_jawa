@@ -1,6 +1,6 @@
 <?php
-/** panel_prediksi.php — Chart.js + AJAX ke predict.php (Owner) */
-if (!adalah_owner()) return;
+/** panel_prediksi.php — Chart.js + AJAX ke predict.php (Owner/Admin) */
+if (!adalah_owner() && !adalah_admin()) return;
 
 $daftar_bahan_prediksi = $pdo->query('SELECT DISTINCT nama_bahan FROM stok_keluar ORDER BY nama_bahan ASC')->fetchAll(PDO::FETCH_COLUMN);
 ?>
