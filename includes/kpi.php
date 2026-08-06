@@ -179,6 +179,7 @@ function kpi_ringkasan_prediksi(PDO $pdo): array {
             return [];
         }
 
+        // Get ingredient categories with their bahan and satuan (needed in both branches)
         $stmt = $pdo->query("
             SELECT
                 kategori_x,
@@ -191,21 +192,97 @@ function kpi_ringkasan_prediksi(PDO $pdo): array {
         ");
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Get latest model coefficients
         $stmtModel = $pdo->query("SELECT * FROM model_regresi ORDER BY id DESC LIMIT 1");
         $model = $stmtModel->fetch(PDO::FETCH_ASSOC);
-        $mad = (float)($model['mad'] ?? 2.01);
+
+        if (!$model) {
+            // No model yet, return zeros but with proper structure
+            $hasil = [];
+            foreach ($rows as $r) {
+                $hasil[] = [
+                    'nama_bahan'     => kategori_to_label($r['kategori_x']),
+                    'kategori_x'     => $r['kategori_x'],
+                    'forecasted_val' => 0.0,
+                    'next_week'      => 'Estimasi',
+                    'mad_error'      => 2.01, // Default MAD when no model
+                    'satuan'         => $r['satuan'] ?? 'Kg'
+                ];
+            }
+            return $hasil;
+        }
+
+        $beta0 = (float) $model['beta0'];
+        $beta1 = (float) $model['beta1'];
+        $beta2 = (float) $model['beta2'];
+        $beta3 = (float) $model['beta3'];
+        $beta4 = (float) $model['beta4'];
+        $beta5 = (float) $model['beta5'];
+        $beta6 = (float) $model['beta6'];
+        $mad = (float) $model['mad'];
+
+        // Get average recent usage for each ingredient category (last 6 weeks)
+        $stmt = $pdo->query("
+            SELECT
+                m.kategori_x,
+                AVG(s.jumlah_terpakai * m.faktor_konversi) as avg_usage
+            FROM stok_keluar s
+            JOIN mapping_bahan m ON s.nama_bahan = m.nama_bahan
+            WHERE s.tanggal >= DATE_SUB(CURDATE(), INTERVAL 6 WEEK)
+            AND m.kategori_x IN ('X1','X2','X3','X4','X5','X6')
+            GROUP BY m.kategori_x
+        ");
+        $avgUsage = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        // Get average recent sales (last 6 weeks) for scaling
+        $avgSalesStmt = $pdo->query("
+            SELECT AVG(jumlah_porsi) as avg_sales
+            FROM penjualan
+            WHERE tanggal >= DATE_SUB(CURDATE(), INTERVAL 6 WEEK)
+        ");
+        $avgSalesResult = $avgSalesStmt->fetch(PDO::FETCH_ASSOC);
+        $avgSalesActual = (float)($avgSalesResult['avg_sales'] ?? 0);
+
+        // Calculate predicted sales using the model and average ingredient usage
+        $x1 = $avgUsage['X1'] ?? 0.0;
+        $x2 = $avgUsage['X2'] ?? 0.0;
+        $x3 = $avgUsage['X3'] ?? 0.0;
+        $x4 = $avgUsage['X4'] ?? 0.0;
+        $x5 = $avgUsage['X5'] ?? 0.0;
+        $x6 = $avgUsage['X6'] ?? 0.0;
+
+        $predictedSales = $beta0
+            + ($beta1 * $x1)
+            + ($beta2 * $x2)
+            + ($beta3 * $x3)
+            + ($beta4 * $x4)
+            + ($beta5 * $x5)
+            + ($beta6 * $x6);
+
+        // Ensure predicted sales is not negative
+        $predictedSales = max(0, $predictedSales);
 
         $hasil = [];
+
         foreach ($rows as $r) {
+            $kategori = $r['kategori_x'];
+            $ingredientUsage = $avgUsage[$kategori] ?? 0.0;
+
+            // Scale ingredient usage proportionally to match predicted sales vs actual average sales
+            // If we predict higher sales, we need proportionally more ingredients
+            $scaleFactor = ($avgSalesActual > 0) ? ($predictedSales / $avgSalesActual) : 1.0;
+            $forecastedUsage = $ingredientUsage * $scaleFactor;
+
             $hasil[] = [
                 'nama_bahan'     => kategori_to_label($r['kategori_x']),
-                'kategori_x'     => $r['kategori_x'],
-                'forecasted_val' => 0.0,
+                'kategori_x'     => $kategori,
+                'forecasted_val' => $forecastedUsage,
                 'next_week'      => 'Estimasi',
                 'mad_error'      => $mad,
                 'satuan'         => $r['satuan'] ?? 'Kg'
             ];
         }
+
         return $hasil;
     } catch (Exception $e) {
         // Mengembalikan array kosong jika ada error database
