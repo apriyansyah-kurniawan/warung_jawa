@@ -120,10 +120,11 @@ try {
     $mad = ($count > 0) ? ($totalError / $count) : 0.0;
     $modelMad = number_format($mad, 3);
 
-    // 6. Chart data: historical data from dataset_regresi (all rows, ordered by tanggal)
+    // 6. Chart data: historical data from dataset_regresi (last 30 days, ordered by tanggal)
     $stmtChart = $pdo->query("
         SELECT tanggal, x1_ayam, x2_sapi, x3_beras, x4_bumbu_merah, x5_bumbu_bawang, x6_minyak, jumlah_porsi
         FROM dataset_regresi
+        WHERE tanggal >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         ORDER BY tanggal ASC
     ");
     $chartRows = $stmtChart->fetchAll();
@@ -218,8 +219,8 @@ try {
         </div>
 
         <!-- Bar Chart Estimasi 6 Bahan Baku -->
-        <div>
-            <canvas id="grafikBar" style="height:250px;"></canvas>
+        <div class="chart-container" style="position: relative; height: 320px; width: 100%;">
+            <canvas id="grafikBar"></canvas>
         </div>
 
         <!-- Card Persamaan Regresi & Akurasi -->
@@ -233,14 +234,14 @@ try {
         </div>
 
         <!-- Grafik Tren Penjualan & Prediksi -->
-        <div>
+        <div class="chart-container" style="position: relative; height: 320px; width: 100%;">
             <canvas id="grafikPrediksi"></canvas>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="assets/js/dashboard.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+<script src="assets/js/dashboard.js" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const ctxLine = document.getElementById('grafikPrediksi').getContext('2d');
@@ -272,10 +273,18 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 title: {
                     display: true,
                     text: 'Tren Jumlah Porsi (Actual vs Prediksi)'
+                },
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 16
+                    }
                 },
                 tooltip: {
                     mode: 'index',
@@ -326,6 +335,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 title: {
                     display: true,

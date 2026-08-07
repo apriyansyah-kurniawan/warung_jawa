@@ -49,6 +49,7 @@ require_once 'includes/header.php';
     });
 </script>
 <?php endif; ?>
+<div class="container mx-auto px-4 dashboard-content">
 
 <!-- 4 KPI Cards — langsung tampil setelah login -->
 <?php require 'includes/kpi_cards.php'; ?>
@@ -170,4 +171,63 @@ document.getElementById('btnLatihModel')?.addEventListener('click', function() {
 });
 </script>
 
+<!-- Modal Edit Stok Keluar -->
+<div class="modal fade" id="modalEditStokKeluar" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="formEditStokKeluar" action="process_edit_stok_keluar.php" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Stok Keluar</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="id" id="edit_stok_id">
+
+          <div class="mb-3">
+            <label class="form-label">Tanggal</label>
+            <input type="date" name="tanggal" id="edit_stok_tanggal" class="form-control" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Nama Bahan</label>
+            <select name="nama_bahan" id="edit_stok_nama_bahan" class="form-select" required>
+              <option value="">-- Pilih Bahan --</option>
+              <?php
+              $koneksi = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+              if ($koneksi->connect_error) {
+                  die("Koneksi database gagal: " . $koneksi->connect_error);
+              }
+              $query_bahan = mysqli_query($koneksi, "SELECT DISTINCT nama_bahan FROM mapping_bahan ORDER BY nama_bahan ASC");
+              while($b = mysqli_fetch_assoc($query_bahan)) {
+                  echo "<option value='".htmlspecialchars($b['nama_bahan'])."'>".htmlspecialchars($b['nama_bahan'])."</option>";
+              }
+              $koneksi->close();
+              ?>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Jumlah Terpakai</label>
+            <input type="number" step="0.01" name="jumlah" id="edit_stok_jumlah" class="form-control" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Satuan</label>
+            <select name="satuan" id="edit_stok_satuan" class="form-select" required>
+              <option value="Kg">Kg</option>
+              <option value="Ikat">Ikat</option>
+              <option value="Liter">Liter</option>
+              <option value="Pcs">Pcs</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+</div>
 <?php require_once 'includes/footer.php'; ?>

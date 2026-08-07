@@ -56,14 +56,31 @@ if ($id_target === $current_user_id) {
 }
 
 try {
+    // Start transaction
+    $pdo->beginTransaction();
+
+    // Set user_id to NULL in related tables to preserve data but remove user reference
+    $tablesToUpdate = [
+        ['table' => 'penjualan', 'column' => 'id_user'],
+        ['table' => 'riwayat_aktivitas', 'column' => 'user_id'],
+        ['table' => 'stok_keluar', 'column' => 'id_user'],
+        ['table' => 'stok_masuk', 'column' => 'id_user']
+    ];
+
+    foreach ($tablesToUpdate as $tableInfo) {
+        $stmt = $pdo->prepare("UPDATE {$tableInfo['table']} SET {$tableInfo['column']} = NULL WHERE {$tableInfo['column']} = :id");
+        $stmt->execute(['id' => $id_target]);
+    }
+
+    // Now delete the user
     $stmt = $pdo->prepare('DELETE FROM users WHERE id = :id');
     $stmt->execute(['id' => $id_target]);
 
     if ($stmt->rowCount() > 0) {
-        catat_aktivitas($pdo, 'Hapus user ID ' . $id_target);
+        catat_aktivitas($pdo, 'Hapus user ID ' . $id_target . ' (mengatur ID user menjadi NULL di tabel terkait)');
         $_SESSION['flash'] = [
             'tipe' => 'success',
-            'pesan' => 'User berhasil dihapus.'
+            'pesan' => 'User berhasil dihapus. Data transaksi terkait telah dipertahankan dengan referensi user yang dihapus.'
         ];
     } else {
         $_SESSION['flash'] = [
@@ -71,10 +88,13 @@ try {
             'pesan' => 'User tidak ditemukan.'
         ];
     }
-} catch (PDOException $e) {
+
+    $pdo->commit();
+} catch (Exception $e) {
+    $pdo->rollBack();
     $_SESSION['flash'] = [
         'tipe' => 'danger',
-        'pesan' => 'User tidak dapat dihapus karena masih memiliki data transaksi.'
+        'pesan' => 'Terjadi kesalahan saat menghapus user: ' . $e->getMessage()
     ];
 }
 
