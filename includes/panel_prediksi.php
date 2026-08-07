@@ -34,6 +34,7 @@ try {
     $beta5 = (float) $model['beta5'];
     $beta6 = (float) $model['beta6'];
     // $mad from model not used; we'll compute our own MAD from dataset_regresi
+    // Use Unicode subscript for clarity
     $modelEq = sprintf("Y' = %.3f + %.3f(X<sub>1</sub>) + %.3f(X<sub>2</sub>) + %.3f(X<sub>3</sub>) + %.3f(X<sub>4</sub>) + %.3f(X<sub>5</sub>) + %.3f(X<sub>6</sub>)", $beta0, $beta1, $beta2, $beta3, $beta4, $beta5, $beta6);
 
     // 2. Average usage (last 4 weeks) for each ingredient from dataset_regresi
@@ -216,10 +217,15 @@ try {
             </table>
         </div>
 
+        <!-- Bar Chart Estimasi 6 Bahan Baku -->
+        <div>
+            <canvas id="grafikBar" style="height:250px;"></canvas>
+        </div>
+
         <!-- Card Persamaan Regresi & Akurasi -->
         <div class="mb-4">
             <div class="fw-bold">Model Regresi Linier Berganda:</div>
-            <div class="text-muted small" id="modelEquation"><?= htmlspecialchars($modelEq) ?></div>
+            <div class="text-muted small" id="modelEquation"><?= $modelEq ?></div>
             <div class="text-muted small">
                 Nilai MAD: <span id="modelMad"><?= htmlspecialchars($modelMad) ?></span> &nbsp;|&nbsp;
                 Total Estimasi Penjualan: <strong><?= number_format($totalEstimasiPorsi, 2) ?></strong> Porsi
@@ -237,8 +243,8 @@ try {
 <script src="assets/js/dashboard.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const ctx = document.getElementById('grafikPrediksi').getContext('2d');
-    const chart = new Chart(ctx, {
+    const ctxLine = document.getElementById('grafikPrediksi').getContext('2d');
+    const lineChart = new Chart(ctxLine, {
         type: 'line',
         data: {
             labels: <?= json_encode($chartLabels) ?>,
@@ -254,8 +260,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 {
                     label: 'Predicted (Model)',
                     data: <?= json_encode($chartPredicted) ?>,
-                    borderColor: 'rgb(54, 162, 235)',
-                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgb(255, 165, 0)', // orange
+                    backgroundColor: 'rgba(255, 165, 0, 0.5)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 4,
                     tension: 0.1,
                     fill: false
                 }
@@ -276,6 +285,69 @@ document.addEventListener('DOMContentLoaded', function() {
             scales: {
                 y: {
                     beginAtZero: false
+                }
+            }
+        }
+    });
+
+    // Bar Chart for estimated usage
+    const ctxBar = document.getElementById('grafikBar').getContext('2d');
+    new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+            labels: ['Ayam', 'Sapi/Tetelan', 'Beras', 'Bumbu Merah', 'Bumbu Bawang', 'Minyak/Santan'],
+            datasets: [{
+                    data: [
+                        <?= number_format($prediksiUsage["X1"], 2) ?>,
+                        <?= number_format($prediksiUsage["X2"], 2) ?>,
+                        <?= number_format($prediksiUsage["X3"], 2) ?>,
+                        <?= number_format($prediksiUsage["X4"], 2) ?>,
+                        <?= number_format($prediksiUsage["X5"], 2) ?>,
+                        <?= number_format($prediksiUsage["X6"], 2) ?>
+                    ],
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.6)',
+                    'rgba(54, 162, 235, 0.6)',
+                    'rgba(255, 206, 86, 0.6)',
+                    'rgba(75, 192, 192, 0.6)',
+                    'rgba(153, 102, 255, 0.6)',
+                    'rgba(255, 159, 64, 0.6)'
+                ],
+                borderColor: [
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)',
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(153, 102, 255, 1)',
+                    'rgba(255, 159, 64, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Estimasi Kebutuhan Bahan Baku Minggu Depan'
+                },
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Kg / Liter'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Bahan Baku'
+                    }
                 }
             }
         }
