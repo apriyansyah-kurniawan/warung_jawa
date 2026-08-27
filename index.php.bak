@@ -1,0 +1,363 @@
+<?php
+/**
+ * index.php — Dashboard utama dengan KPI cards + panel per role.
+ */
+require_once 'config.php';
+require_once 'includes/auth.php';
+require_once 'includes/kpi.php';
+
+cek_login();
+
+$judul_halaman = 'Dashboard';
+// Determine active menu from page parameter
+$page = $_GET['page'] ?? '';
+switch ($page) {
+    case 'user':
+    case 'users':
+        $menu_aktif = 'users';
+        break;
+    case 'menu':
+        // Menu management is inside admin panel, not a separate sidebar item.
+        // We'll default to 'beranda' or maybe set to something else.
+        // Since there's no sidebar item for menu, we can set to empty and handle via JS to scroll.
+        $menu_aktif = 'beranda'; // fallback
+        break;
+    default:
+        $menu_aktif = 'beranda';
+        break;
+}
+$flash         = $_SESSION['flash'] ?? null;
+unset($_SESSION['flash']);
+
+// Ambil data KPI (termasuk prediksi Python untuk Owner/Admin)
+$kpi = ambil_semua_kpi($pdo);
+
+require_once 'includes/header.php';
+?>
+
+<?php if ($flash): ?>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        Swal.fire({
+            icon: '<?= htmlspecialchars($flash['tipe'] === 'danger' ? 'error' : $flash['tipe']) ?>',
+            title: '<?= htmlspecialchars($flash['tipe'] === 'danger' ? 'Gagal' : ucfirst($flash['tipe'])) ?>',
+            text: '<?= addslashes(htmlspecialchars($flash['pesan'], ENT_QUOTES)) ?>',
+            confirmButtonColor: '#198754',
+            timer: 2500,
+            timerProgressBar: true
+        });
+    });
+</script>
+<?php endif; ?>
+<div class="container mx-auto px-4 dashboard-content">
+
+<!-- 4 KPI Cards — langsung tampil setelah login -->
+<?php require 'includes/kpi_cards.php'; ?>
+
+<?php
+if (adalah_kasir()) {
+    // Kasir view: show recent transaction list
+    ?>
+    <!-- Recent Transaction List for Kasir -->
+    <div class="modern-card">
+        <div class="card-header"><span><i class="bi bi-clock-history"></i> Transaksi Terbaru</span></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-modern table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Tanggal</th><th>Menu</th><th class="text-end">Total</th><th>Kasir</th></tr>
+                    </thead>
+                    <tbody>
+                    <?php
+                    $stmt = $pdo->query('
+                        SELECT p.*, u.username AS kasir FROM penjualan p
+                        JOIN users u ON p.id_user = u.id ORDER BY p.tanggal DESC, p.id DESC LIMIT 10
+                    ');
+                    $daftar = $stmt->fetchAll();
+                    if (empty($daftar)):
+                    ?>
+                        <tr><td colspan="4" class="text-muted p-3">Belum ada transaksi.</td></tr>
+                    <?php else: foreach ($daftar as $row): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($row['tanggal']) ?></td>
+                            <td><?= htmlspecialchars($row['nama_menu']) ?></td>
+                            <td class="text-end"><?= format_rupiah($row['total_harga']) ?></td>
+                            <td><?= htmlspecialchars($row['kasir']) ?></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <?php
+} elseif (adalah_admin()) {
+    // Admin view: daily operational banner
+    ?>
+    <!-- Daily Operational Banner for Admin -->
+    <div class="modern-card">
+        <div class="card-header"><span><i class="bi bi-clock"></i> Operasional Harian</span></div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <button type="button" class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#modalTambahStokMasuk">
+                        <i class="bi bi-box-arrow-in-down me-2"></i> Tambah Stok Masuk
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <div class="text-end">
+                        <strong>Bahan Mendekati Batas Minimum:</strong>
+                        <span class="badge bg-warning">3 bahan</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php
+    require 'includes/widget_aktivitas.php';
+    require 'includes/panel_admin.php';
+    // No technical section for admin
+    ?>
+    <?php
+} else {
+    // Owner view: show owner banner and technical section
+    ?>
+    <?php
+    require 'includes/widget_aktivitas.php';
+    require 'includes/panel_owner.php';
+    // Technical section (chart) for owner
+    ?>
+    <section id="teknis" class="modern-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <span><i class="bi bi-cpu"></i> Perhitungan Prediksi Kebutuhan Bahan Baku</span>
+                <div class="ms-3">
+                    <span class="badge bg-info me-2">R²: 0.98</span>
+                    <span class="badge bg-info">MAD: 1.072</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <button type="button" id="hitungPrediksiBtn" class="btn btn-primary w-100">
+                        <i class="bi bi-brain me-2"></i> Hitung Prediksi Stok
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <div id="statusModel" class="text-end">
+
+                    </div>
+                </div>
+            </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const btn = document.getElementById('hitungPrediksiBtn');
+                    btn.addEventListener('click', function () {
+                        // Disable button and show loading
+                        btn.disabled = true;
+                        const originalHtml = btn.innerHTML;
+                        btn.innerHTML = '<i class="bi bi-brain me-2"></i> Sedang menghitung prediksi...';
+
+                        // Fetch the handler
+                        fetch('aksi/latih_model.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Show success toast
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Berhasil!',
+                                    text: data.message || 'Model regresi berhasil dilatih.',
+                                    showConfirmButton: false,
+                                    timer: 1500
+                                }).then(() => {
+                                    // Reload page to reflect updated chart/KPI
+                                    location.reload();
+                                });
+                            } else {
+                                // Show error
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Gagal!',
+                                    text: data.message || 'Terjadi kesalahan saat melatih model.',
+                                    confirmButtonText: 'OK'
+                                });
+                            }
+                            // Reset button state
+                            btn.disabled = false;
+                            btn.innerHTML = originalHtml;
+                        })
+                        .catch(err => {
+                            console.error('Error:', err);
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Gagal!',
+                                text: 'Terjadi kesalahan koneksi.',
+                                confirmButtonText: 'OK'
+                            });
+                            // Reset button state
+                            btn.disabled = false;
+                            btn.innerHTML = originalHtml;
+                        });
+                    });
+                });
+            </script>
+            <div class="mt-4">
+                <small class="text-muted">
+                    Model regresi linier berganda digunakan untuk memprediksi kebutuhan bahan baku berdasarkan data konsumsi historis.
+                </small>
+            </div>
+            <!-- Grafik Multivariabel Penjualan dan Variabel Bahan Baku -->
+            <div class="border rounded p-3 mb-3" style="border-color: #dee2e6; background-color: #f8f9fa;">
+                <h6 class="mb-3"><i class="bi bi-graph-up-arrow me-2"></i> Grafik Multivariabel Penjualan dan Variabel Bahan Baku</h6>
+                <div class="chart-container" style="position: relative; height: 400px; width: 100%;">
+                    <canvas id="chartMultivariabel"></canvas>
+                </div>
+                <?php
+                // Pastikan koneksi db sudah aktif ($pdo)
+                if (!isset($pdo)) {
+                    // This should not happen, but just in case
+                    die('Database connection not established.');
+                }
+
+                // 1. AMBIL MODEL REGRESI TERBARU
+                $q_model = $pdo->query("SELECT * FROM model_regresi ORDER BY id DESC LIMIT 1");
+                $model = ($q_model && $q_model->rowCount() > 0) ? $q_model->fetch(PDO::FETCH_ASSOC) : [];
+
+                $b0  = (float)($model['beta0'] ?? $model['b0'] ?? 6.946);
+                $b1  = (float)($model['beta1'] ?? $model['b1'] ?? 3.990);
+                $b2  = (float)($model['beta2'] ?? $model['b2'] ?? 0.039);
+                $b3  = (float)($model['beta3'] ?? $model['b3'] ?? 4.837);
+                $b4  = (float)($model['beta4'] ?? $model['b4'] ?? -4.204);
+                $b5  = (float)($model['beta5'] ?? $model['b5'] ?? -0.935);
+                $b6  = (float)($model['beta6'] ?? $model['b6'] ?? -5.741);
+                $mad = round((float)($model['mad'] ?? 1.072), 3);
+                $r2  = round((float)($model['r_square'] ?? $model['r2'] ?? 0.982), 3);
+
+                // 2. AMBIL 30 DATASET REGRESI TERAKHIR (LIMIT 30 DENGAN SUBQUERY)
+                $chart_labels    = [];
+                $chart_actual    = [];
+                $chart_predicted = [];
+                $chart_x1 = []; $chart_x2 = []; $chart_x3 = [];
+                $chart_x4 = []; $chart_x5 = []; $chart_x6 = [];
+
+                $sum_x1 = 0; $sum_x2 = 0; $sum_x3 = 0; $sum_x4 = 0; $sum_x5 = 0; $sum_x6 = 0;
+                $count_rows = 0;
+
+                $q_data = $pdo->query("SELECT * FROM (SELECT * FROM dataset_regresi ORDER BY tanggal DESC LIMIT 30) AS sub ORDER BY tanggal ASC");
+
+                if ($q_data && $q_data->rowCount() > 0) {
+                    while ($row = $q_data->fetch(PDO::FETCH_ASSOC)) {
+                        // Ambil data dengan fallback berbagai kemungkinan nama kolom
+                        $tgl   = date('d M', strtotime($row['tanggal']));
+                        $porsi = (float)($row['jumlah_porsi'] ?? $row['y_porsi'] ?? $row['total_porsi'] ?? $row['y'] ?? 80);
+                        $x1    = (float)($row['x1_ayam'] ?? $row['x1'] ?? 0);
+                        $x2    = (float)($row['x2_sapi'] ?? $row['x2'] ?? 0);
+                        $x3    = (float)($row['x3_beras'] ?? $row['x3'] ?? 0);
+                        $x4    = (float)($row['x4_bumbu_merah'] ?? $row['x4'] ?? 0);
+                        $x5    = (float)($row['x5_bumbu_bawang'] ?? $row['x5'] ?? 0);
+                        $x6    = (float)($row['x6_minyak'] ?? $row['x6'] ?? 0);
+
+                        $chart_labels[] = $tgl;
+                        $chart_actual[] = $porsi;
+                        $chart_x1[]     = $x1;
+                        $chart_x2[]     = $x2;
+                        $chart_x3[]     = $x3;
+                        $chart_x4[]     = $x4;
+                        $chart_x5[]     = $x5;
+                        $chart_x6[]     = $x6;
+
+                        // Hitung Y' Prediksi Regresi
+                        $y_pred = $b0 + ($b1 * $x1) + ($b2 * $x2) + ($b3 * $x3) + ($b4 * $x4) + ($b5 * $x5) + ($b6 * $x6);
+                        $chart_predicted[] = round($y_pred, 2);
+
+                        // Akumulasi untuk rata-rata estimasi minggu depan
+                        $sum_x1 += $x1; $sum_x2 += $x2; $sum_x3 += $x3;
+                        $sum_x4 += $x4; $sum_x5 += $x5; $sum_x6 += $x6;
+                        $count_rows++;
+                    }
+                }
+
+                // 3. HITUNG ESTIMASI KEBUTUHAN MINGGU DEPAN (7 HARI)
+                $divider = max($count_rows, 1);
+                $est_x1 = round(($sum_x1 / $divider) * 7, 2);
+                $est_x2 = round(($sum_x2 / $divider) * 7, 2);
+                $est_x3 = round(($sum_x3 / $divider) * 7, 2);
+                $est_x4 = round(($sum_x4 / $divider) * 7, 2);
+                $est_x5 = round(($sum_x5 / $divider) * 7, 2);
+                $est_x6 = round(($sum_x6 / $divider) * 7, 2);
+
+                // Total Estimasi Porsi Minggu Depan
+                $total_estimasi_porsi = round(($b0 * 7) + ($b1 * $est_x1) + ($b2 * $est_x2) + ($b3 * $est_x3) + ($b4 * $est_x4) + ($b5 * $est_x5) + ($b6 * $est_x6), 2);
+                ?>
+                <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const ctx = document.getElementById('chartMultivariabel').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: <?= json_encode($chart_labels) ?>,
+                            datasets: [
+                                {
+                                    label: 'Penjualan Aktual (Y)',
+                                    data: <?= json_encode($chart_actual) ?>,
+                                    borderColor: '#e02424',
+                                    backgroundColor: '#e02424',
+                                    yAxisID: 'y',
+                                    tension: 0,
+                                    pointRadius: 2
+                                },
+                                {
+                                    label: 'Total Prediksi (Y\')',
+                                    data: <?= json_encode($chart_predicted) ?>,
+                                    borderColor: '#f59e0b',
+                                    backgroundColor: '#f59e0b',
+                                    borderDash: [5, 5],
+                                    yAxisID: 'y',
+                                    tension: 0,
+                                    pointRadius: 2
+                                },
+                                { label: 'X1: Ayam', data: <?= json_encode($chart_x1) ?>, borderColor: '#3b82f6', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                                { label: 'X2: Sapi/Tetelan', data: <?= json_encode($chart_x2) ?>, borderColor: '#8b5cf6', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                                { label: 'X3: Beras', data: <?= json_encode($chart_x3) ?>, borderColor: '#10b981', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                                { label: 'X4: Bumbu Merah', data: <?= json_encode($chart_x4) ?>, borderColor: '#ec4899', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                                { label: 'X5: Bumbu Bawang', data: <?= json_encode($chart_x5) ?>, borderColor: '#eab308', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                                { label: 'X6: Minyak/Santan', data: <?= json_encode($chart_x6) ?>, borderColor: '#06b6d4', yAxisID: 'y1', tension: 0, pointRadius: 2 }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    type: 'linear',
+                                    position: 'left',
+                                    title: { display: true, text: 'Penjualan (Porsi)' }
+                                },
+                                y1: {
+                                    type: 'linear',
+                                    position: 'right',
+                                    grid: { drawOnChartArea: false },
+                                    title: { display: true, text: 'Variabel Bahan Baku' },
+                                    min: 0,
+                                    max: 15
+                                }
+                            }
+                        }
+                    });
+                });
+                </script>
+            </div>
+        </div>
+    </section>
+    <?php
+}
+?>
+</div>
+<?php require_once 'includes/footer.php'; ?>

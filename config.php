@@ -6,8 +6,14 @@ define('DB_USER', 'root');
 define('DB_PASS', '');
 
 if (!defined('PYTHON_PATH')) {
-    // Cek lokasi python3 di sistem
-    if (file_exists('/opt/homebrew/bin/python3')) {
+    // 1. Prioritaskan virtual environment lokal proyek jika ada
+    if (file_exists(__DIR__ . '/venv/bin/python3')) {
+        define('PYTHON_PATH', __DIR__ . '/venv/bin/python3');
+    } elseif (file_exists(__DIR__ . '/../venv/bin/python3')) {
+        define('PYTHON_PATH', __DIR__ . '/../venv/bin/python3');
+    } 
+    // 2. Fallback ke sistem Python macOS/Linux
+    elseif (file_exists('/opt/homebrew/bin/python3')) {
         define('PYTHON_PATH', '/opt/homebrew/bin/python3');
     } elseif (file_exists('/usr/local/bin/python3')) {
         define('PYTHON_PATH', '/usr/local/bin/python3');
@@ -17,6 +23,7 @@ if (!defined('PYTHON_PATH')) {
         define('PYTHON_PATH', 'python3');
     }
 }
+
 define('DAFTAR_SATUAN', ['Kg', 'Ons', 'Ikat', 'Liter', 'Pcs']);
 
 /** Timeout session: 15 menit tanpa aktivitas (dalam detik) */

@@ -8,7 +8,7 @@
  *   - Koreksi manual stok_keluar (jika diperlukan)
  *   - Pengecekan teknis engine Python
  *   - Manajemen menu dan resep (hanya Admin/Owner)
- * -------------------------------------------------------------------------
+ *   -------------------------------------------------------------------------
  */
 
 // Hanya Admin dan Owner yang bisa mengakses panel ini
@@ -95,6 +95,7 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                                           onsubmit="return confirmDelete(this, 'Hapus user ini?')">
                                         <input type="hidden" name="id" value="<?= $user['id'] ?>">
                                         <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                                    </form>
                                 <?php else: ?>
                                     <span class="text-muted small">(Anda)</span>
                                 <?php endif; ?>
@@ -174,7 +175,7 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                             <?php if ((int)$menu['is_menu_utama'] === 1): ?>
                                 <span class="badge bg-success">Utama</span>
                             <?php else: ?>
-                                <span class="badge bg-secondary">Tidak Utama</span>
+                                <span class="bg-secondary">Tidak Utama</span>
                             <?php endif; ?>
                         </td>
                         <td class="text-center">
@@ -217,7 +218,7 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
 <div class="modal fade" id="modalTambahMenu" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form id="formTambahMenu" method="POST" action="aksi/menu.php">
+            <form id="formTambahMenu" method="POST" action="aksi/simpan_menu_baru.php">
                 <div class="modal-header">
                     <h5 class="modal-title">Tambah Menu Baru</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -237,13 +238,17 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
                             <label class="form-label">Bahan Baku *</label>
-                            <input type="text" name="resep_nama_bahan" class="form-control" list="listBahanMenu" required>
-                            <datalist id="listBahanMenu">
-                                <?php foreach ($daftar_bahan as $bahan): ?>
-                                    <option value="<?= htmlspecialchars($bahan) ?>">
+                            <select name="resep_nama_bahan" class="form-select" id="bahanSelect" required>
+                                <option value="">-- Pilih Bahan --</option>
+                                <?php
+                                // Get list of bahan from mapping_bahan
+                                $stmtMap = $pdo->query('SELECT DISTINCT nama_bahan FROM mapping_bahan ORDER BY nama_bahan');
+                                $daftarBahanMap = $stmtMap->fetchAll(PDO::FETCH_COLUMN);
+                                foreach ($daftarBahanMap as $bahan): ?>
+                                    <option value="<?= htmlspecialchars($bahan) ?>"><?= htmlspecialchars($bahan) ?></option>
                                 <?php endforeach; ?>
-                            </datalist>
-                            <small class="text-muted">Pilih bahan dari daftar stok</small>
+                            </select>
+                            <small class="text-muted">Bahan yang terpetakan ke variabel X1-X6</small>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Pengali (per porsi)</label>
@@ -256,6 +261,12 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                                     <option value="<?= $satuan ?>" <?= $satuan === 'Kg' ? 'selected' : '' ?>><?= $satuan ?></option>
                                 <?php endforeach; ?>
                             </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <input type="hidden" name="kategori_x" id="kategoriXInput" value="">
                         </div>
                     </div>
 
@@ -299,6 +310,7 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                 <div class="modal-body">
                     <input type="hidden" name="menu_id" id="editMenuId">
                     <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="kategori_x" id="kategoriXInputEdit" value="">
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
@@ -314,12 +326,17 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
                             <label class="form-label">Bahan Baku *</label>
-                            <input type="text" name="resep_nama_bahan" class="form-control" id="editResepBahan" list="listBahanMenuEdit" required>
-                            <datalist id="listBahanMenuEdit">
-                                <?php foreach ($daftar_bahan as $bahan): ?>
-                                    <option value="<?= htmlspecialchars($bahan) ?>">
+                            <select name="resep_nama_bahan" class="form-select" id="editResepBahanSelect" required>
+                                <option value="">-- Pilih Bahan --</option>
+                                <?php
+                                // Get list of bahan from mapping_bahan
+                                $stmtMap = $pdo->query('SELECT DISTINCT nama_bahan FROM mapping_bahan ORDER BY nama_bahan');
+                                $daftarBahanMap = $stmtMap->fetchAll(PDO::FETCH_COLUMN);
+                                foreach ($daftarBahanMap as $bahan): ?>
+                                    <option value="<?= htmlspecialchars($bahan) ?>"><?= htmlspecialchars($bahan) ?></option>
                                 <?php endforeach; ?>
-                            </datalist>
+                            </select>
+                            <small class="text-muted">Bahan yang terpetakan ke variabel X1-X6</small>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Pengali (per porsi)</label>
@@ -485,19 +502,6 @@ if (typeof jQuery === 'undefined' || !jQuery.fn.dataTable) {
 } else {
     initializeDataTable();
 }
-    // Load DataTables CSS
-    $('head').append('<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">');
-
-    // Load DataTables JS
-    $.getScript("https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js")
-        .done(function() {
-            $.getScript("https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js", function() {
-                initializeDataTable();
-            });
-        });
-} else {
-    initializeDataTable();
-}
 
 function initializeDataTable() {
     $('#menuTable').DataTable({
@@ -539,16 +543,21 @@ document.getElementById('formTambahMenu')?.addEventListener('submit', async func
 
     const bahan = this.querySelector('[name="resep_nama_bahan"]').value;
     const kategoriSpan = document.getElementById('kategoriXValue');
+    const kategoriInput = document.getElementById('kategoriXInput');
 
     if (bahan) {
         const kategori = await getBahanCategory(bahan);
         kategoriSpan.textContent = kategori;
+        kategoriInput.value = kategori;
         if (kategori === '-') {
             kategoriSpan.style.color = 'orange';
             kategoriSpan.innerHTML += ' <small>(Belum terpetakan ke X1-X6)</small>';
         } else {
             kategoriSpan.style.color = 'green';
         }
+    } else {
+        kategoriSpan.textContent = '-';
+        kategoriInput.value = '';
     }
 
     // Submit the form normally after checking
@@ -561,16 +570,21 @@ document.getElementById('formEditMenu')?.addEventListener('submit', async functi
 
     const bahan = this.querySelector('[name="resep_nama_bahan"]').value;
     const kategoriSpan = document.getElementById('kategoriXValueEdit');
+    const kategoriInput = document.getElementById('kategoriXInputEdit');
 
     if (bahan) {
         const kategori = await getBahanCategory(bahan);
         kategoriSpan.textContent = kategori;
+        kategoriInput.value = kategori;
         if (kategori === '-') {
             kategoriSpan.style.color = 'orange';
             kategoriSpan.innerHTML += ' <small>(Belum terpetakan ke X1-X6)</small>';
         } else {
             kategoriSpan.style.color = 'green';
         }
+    } else {
+        kategoriSpan.textContent = '-';
+        kategoriInput.value = '';
     }
 
     // Submit the form normally after checking
@@ -581,14 +595,17 @@ document.getElementById('formEditMenu')?.addEventListener('submit', async functi
 document.querySelector('#formTambahMenu [name="resep_nama_bahan"]')?.addEventListener('input', async function() {
     const bahan = this.value;
     const kategoriSpan = document.getElementById('kategoriXValue');
+    const kategoriInput = document.getElementById('kategoriXInput');
 
     if (!bahan) {
         kategoriSpan.textContent = '-';
+        kategoriInput.value = '';
         return;
     }
 
     const kategori = await getBahanCategory(bahan);
     kategoriSpan.textContent = kategori;
+    kategoriInput.value = kategori;
     if (kategori === '-') {
         kategoriSpan.style.color = 'orange';
         kategoriSpan.innerHTML += ' <small>(Belum terpetakan ke X1-X6)</small>';
@@ -601,14 +618,17 @@ document.querySelector('#formTambahMenu [name="resep_nama_bahan"]')?.addEventLis
 document.querySelector('#formEditMenu [name="resep_nama_bahan"]')?.addEventListener('input', async function() {
     const bahan = this.value;
     const kategoriSpan = document.getElementById('kategoriXValueEdit');
+    const kategoriInput = document.getElementById('kategoriXInputEdit');
 
     if (!bahan) {
         kategoriSpan.textContent = '-';
+        kategoriInput.value = '';
         return;
     }
 
     const kategori = await getBahanCategory(bahan);
     kategoriSpan.textContent = kategori;
+    kategoriInput.value = kategori;
     if (kategori === '-') {
         kategoriSpan.style.color = 'orange';
         kategoriSpan.innerHTML += ' <small>(Belum terpetakan ke X1-X6)</small>';
@@ -623,7 +643,7 @@ document.getElementById('modalEditMenu')?.addEventListener('show.bs.modal', func
     document.getElementById('editMenuId').value = btn.dataset.id;
     document.getElementById('editNamaMenu').value = btn.dataset.nama;
     document.getElementById('editHarga').value = btn.dataset.harga;
-    document.getElementById('editResepBahan').value = btn.dataset.resepBahan;
+    document.getElementById('editResepBahanSelect').value = btn.dataset.resepBahan;
     document.getElementById('editResepPengali').value = btn.dataset.resepPengali;
     document.getElementById('editResepSatuan').value = btn.dataset.resepSatuan;
     document.getElementById('editIsUtama').checked = btn.dataset.isUtama === '1';
@@ -631,12 +651,15 @@ document.getElementById('modalEditMenu')?.addEventListener('show.bs.modal', func
     // Update kategori display
     const bahan = btn.dataset.resepBahan;
     const kategoriSpan = document.getElementById('kategoriXValueEdit');
+    const kategoriInput = document.getElementById('kategoriXInputEdit');
     if (bahan) {
         fetch('get_bahan_category.php?bahan=' + encodeURIComponent(bahan))
             .then(r => r.json())
             .then(data => {
-                kategoriSpan.textContent = data.success ? data.kategori : '-';
-                if (data.kategori === '-') {
+                const kategori = data.success ? data.kategori : '-';
+                kategoriSpan.textContent = kategori;
+                kategoriInput.value = kategori;
+                if (kategori === '-') {
                     kategoriSpan.style.color = 'orange';
                     kategoriSpan.innerHTML += ' <small>(Belum terpetakan ke X1-X6)</small>';
                 } else {
@@ -645,6 +668,7 @@ document.getElementById('modalEditMenu')?.addEventListener('show.bs.modal', func
             });
     } else {
         kategoriSpan.textContent = '-';
+        kategoriInput.value = '';
     }
 });
 
@@ -668,6 +692,7 @@ document.getElementById('modalHapusAdmin')?.addEventListener('show.bs.modal', fu
         form.action = 'aksi/hapus_stok.php';
     }
 });
+
 function confirmDelete(form, message) {
     Swal.fire({
         title: 'Apakah Anda yakin?',

@@ -22,36 +22,38 @@ $daftar_bahan = $pdo->query('SELECT DISTINCT nama_bahan FROM stok_keluar ORDER B
 <div class="modern-card" id="stok-masuk">
     <div class="card-header"><span><i class="bi bi-box-arrow-in-down"></i> Stok Masuk / Refill</span></div>
     <div class="card-body">
-        <form method="POST" action="aksi/stok_masuk.php">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label">Tanggal</label>
-                    <input type="date" name="tanggal" class="form-control" value="<?= date('Y-m-d') ?>" required>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Nama Bahan</label>
-                    <input type="text" name="nama_bahan" class="form-control" list="listBahanOwner" required>
-                    <datalist id="listBahanOwner">
-                        <?php foreach ($daftar_bahan as $b): ?><option value="<?= htmlspecialchars($b) ?>"><?php endforeach; ?>
-                    </datalist>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Jumlah</label>
-                    <input type="number" name="jumlah_masuk" class="form-control" step="0.01" min="0.01" required>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Satuan</label>
-                    <select name="satuan" class="form-select">
-                        <?php foreach (DAFTAR_SATUAN as $s): ?><option><?= $s ?></option><?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Keterangan</label>
-                    <input type="text" name="keterangan" class="form-control" placeholder="Opsional">
-                </div>
+    <form method="POST" action="aksi/stok_masuk.php">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Tanggal</label>
+                <input type="date" name="tanggal" class="form-control" value="<?= date('Y-m-d') ?>" required>
             </div>
-            <button type="submit" class="btn btn-success mt-3"><i class="bi bi-plus-lg"></i> Simpan Stok Masuk</button>
-        </form>
+            <div class="col-md-3">
+                <label class="form-label">Nama Bahan</label>
+                <input type="text" name="nama_bahan" class="form-control" list="listBahanOwner" required>
+                <datalist id="listBahanOwner">
+                        <?php foreach ($daftar_bahan as $b): ?>
+                            <option value="<?= htmlspecialchars($b) ?>"><?= htmlspecialchars($b) ?></option>
+                        <?php endforeach; ?>
+                </datalist>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Jumlah</label>
+                <input type="number" name="jumlah_masuk" class="form-control" step="0.01" min="0.01" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Satuan</label>
+                <select name="satuan" class="form-select">
+                    <?php foreach (DAFTAR_SATUAN as $s): ?><option><?= $s ?></option><?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Keterangan</label>
+                <input type="text" name="keterangan" class="form-control" placeholder="Opsional">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-success mt-3"><i class="bi bi-plus-lg"></i> Simpan Stok Masuk</button>
+    </form>
     </div>
 </div>
 
@@ -115,34 +117,52 @@ $daftar_bahan = $pdo->query('SELECT DISTINCT nama_bahan FROM stok_keluar ORDER B
                 </table>
             </div>
         </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="modern-card h-100">
-            <div class="card-header">Log Stok Masuk</div>
-            <div class="card-body p-0">
-                <table class="table table-modern table-sm mb-0">
-                    <thead><tr><th>Tanggal</th><th>Bahan</th><th class="text-end">Jumlah</th></tr></thead>
-                    <tbody>
-                        <?php if (empty($log_stok_masuk)): ?>
-                            <tr><td colspan="3" class="text-muted p-3">Belum ada data.</td></tr>
-                        <?php else: foreach ($log_stok_masuk as $row): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($row['tanggal']) ?></td>
-                                <td><?= htmlspecialchars($row['nama_bahan']) ?></td>
-                                <td class="text-end"><?= format_jumlah($row['jumlah_masuk'], $row['satuan']) ?></td>
-                                <td>
-                                    <button class="btn btn-sm btn-link text-danger p-0" data-bs-toggle="modal"
-                                            data-bs-target="#modalHapusAdmin"
-                                            data-id="<?= $row['id'] ?>"
-                                            data-info="<?= htmlspecialchars($row['nama_bahan']) ?>"
-                                            data-type="stok_masuk">
-                                        Hapus
+        <div class="col-lg-6">
+            <div class="modern-card h-100">
+                <div class="card-header">Log Stok Masuk</div>
+                <div class="card-body p-0">
+                    <table class="table table-modern table-sm mb-0">
+                        <thead><tr><th>Tanggal</th><th>Bahan</th><th class="text-end">Jumlah</th></tr></thead>
+                        <tbody>
+                            <?php if (empty($log_stok_masuk)): ?>
+                                <tr><td colspan="3" class="text-muted p-3">Belum ada data.</td></tr>
+                            <?php else: foreach ($log_stok_masuk as $row): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($row['tanggal']) ?></td>
+                                    <td><?= htmlspecialchars($row['nama_bahan']) ?></td>
+                                    <td class="text-end"><?= format_jumlah($row['jumlah_masuk'], $row['satuan']) ?></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-link text-danger p-0" data-bs-toggle="modal"
+                                                data-bs-target="#modalHapusAdmin"
+                                                data-id="<?= $row['id'] ?>"
+                                                data-info="<?= htmlspecialchars($row['nama_bahan']) ?>"
+                                                data-type="stok_masuk">
+                                            Hapus
+                                        </button>
                                     </button>
                                 </td>
                             </tr>
                         <?php endforeach; endif; ?>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Hapus Stok -->
+<div class="modal fade" id="modalHapusAdmin" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Hapus Stok Keluar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">Hapus data stok: <strong id="infoHapusAdmin"></strong>?</div>
+            <div class="modal-footer">
+                <form method="POST" action="aksi/hapus_stok.php">
+                    <input type="hidden" name="id" id="idHapusAdmin">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-danger">Hapus</button>
+                </form>
             </div>
         </div>
     </div>
