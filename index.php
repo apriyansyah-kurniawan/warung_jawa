@@ -1,101 +1,58 @@
 <?php
-require_once 'config.php';
-require_once 'includes/auth.php';
-require_once 'includes/kpi.php';
+/**
+ * index.php — Dashboard dua kolom: sidebar kiri + analitik.
+ */
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/regresi.php';
 cek_login();
 
-$judul_halaman = 'Dashboard';
-$page = $_GET['page'] ?? 'beranda';
-$flash = $_SESSION['flash'] ?? null;
-unset($_SESSION['flash']);
+$role = strtolower((string) ($_SESSION['role'] ?? ''));
+$base = '';
+$page_aktif = 'index';
 
-$kpi = ambil_semua_kpi($pdo);
+$kpi = ambil_kpi_dashboard($pdo);
+$totalStokKg = $kpi['totalStokKg'];
+$penjualanHariIni = $kpi['penjualanHariIni'];
+$penjualanSub = $kpi['penjualanSub'];
+$prediksiBesok = $kpi['prediksiBesok'];
+$bahanStokRendah = $kpi['bahanStokRendah'];
+$kpiError = $kpi['error'];
+$chart_labels = $kpi['chart']['labels'];
+$chart_actual = $kpi['chart']['actual'];
+$chart_predicted = $kpi['chart']['predicted'];
+$chart_x1 = $kpi['chart']['x']['x1_ayam'];
+$chart_x2 = $kpi['chart']['x']['x2_sapi'];
+$chart_x3 = $kpi['chart']['x']['x3_beras'];
+$chart_x4 = $kpi['chart']['x']['x4_bumbu_merah'];
+$chart_x5 = $kpi['chart']['x']['x5_bumbu_bawang'];
+$chart_x6 = $kpi['chart']['x']['x6_minyak'];
+$chart_x7 = $kpi['chart']['x']['x7_telur'];
+$chart_x8 = $kpi['chart']['x']['x8_seafood'];
+$chart_x9 = $kpi['chart']['x']['x9_jeroan'];
+$chart_x10 = $kpi['chart']['x']['x10_jengkol'];
+$chart_x11 = $kpi['chart']['x']['x11_tahu_tempe'];
 
-// -------------------------------------------------------------
-// 1. DATA MODEL REGRESI & ANALITIK ESTIMASI (UNTUK OWNER / UMUM)
-// -------------------------------------------------------------
-$q_model = $pdo->query("SELECT * FROM model_regresi ORDER BY id DESC LIMIT 1");
-$data_model = $q_model->fetch(PDO::FETCH_ASSOC);
+$badgeRole = match ($role) {
+    'admin' => 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+    'owner' => 'bg-indigo-100 text-indigo-800 border border-indigo-300',
+    'kasir' => 'bg-amber-100 text-amber-800 border border-amber-300',
+    default => 'bg-slate-100 text-slate-700 border border-slate-300',
+};
 
-if ($data_model) {
-    $b0  = (float)($data_model['beta0'] ?? 6.480);
-    $b1  = (float)($data_model['beta1'] ?? 3.723);
-    $b2  = (float)($data_model['beta2'] ?? 0.108);
-    $b3  = (float)($data_model['beta3'] ?? 5.097);
-    $b4  = (float)($data_model['beta4'] ?? -5.872);
-    $b5  = (float)($data_model['beta5'] ?? -1.077);
-    $b6  = (float)($data_model['beta6'] ?? -4.749);
-    $mad = round((float)($data_model['mad'] ?? 1.127), 3);
-    $r2  = round((float)($data_model['r_square'] ?? 0.982), 3);
-    $model_tersedia = true;
-} else {
-    $b0 = 6.480; $b1 = 3.723; $b2 = 0.108; $b3 = 5.097; $b4 = -5.872; $b5 = -1.077; $b6 = -4.749;
-    $mad = 1.127; $r2 = 0.982;
-    $model_tersedia = false;
-}
-
-// Rata-rata 7 hari terakhir dari dataset_regresi untuk estimasi pekan depan
-$q_avg = $pdo->query("
-    SELECT
-        AVG(x1_ayam) * 7 AS est_ayam,
-        AVG(x2_sapi) * 7 AS est_sapi,
-        AVG(x3_beras) * 7 AS est_beras,
-        AVG(x4_bumbu_merah) * 7 AS est_merah,
-        AVG(x5_bumbu_bawang) * 7 AS est_bawang,
-        AVG(x6_minyak) * 7 AS est_minyak
-    FROM (
-        SELECT * FROM dataset_regresi ORDER BY tanggal DESC LIMIT 7
-    ) AS sub
-");
-$est = $q_avg->fetch(PDO::FETCH_ASSOC);
-
-$est_ayam   = round((float)($est['est_ayam'] ?? 61.97), 2);
-$est_sapi   = round((float)($est['est_sapi'] ?? 24.51), 2);
-$est_beras  = round((float)($est['est_beras'] ?? 76.94), 2);
-$est_merah  = round((float)($est['est_merah'] ?? 10.20), 2);
-$est_bawang = round((float)($est['est_bawang'] ?? 6.44), 2);
-$est_minyak = round((float)($est['est_minyak'] ?? 16.67), 2);
-
-$total_estimasi_porsi = round(($b0 * 7) + ($b1 * $est_ayam) + ($b2 * $est_sapi) + ($b3 * $est_beras) + ($b4 * $est_merah) + ($b5 * $est_bawang) + ($b6 * $est_minyak), 2);
-
-// -------------------------------------------------------------
-// 2. DATASET UNTUK GRAFIK MULTIVARIABEL (30 HARI TERAKHIR)
-// -------------------------------------------------------------
-$chart_labels    = [];
-$chart_actual    = [];
-$chart_predicted = [];
-$chart_x1 = []; $chart_x2 = []; $chart_x3 = [];
-$chart_x4 = []; $chart_x5 = []; $chart_x6 = [];
-
-$q_chart = $pdo->query("
-    SELECT * FROM (
-        SELECT * FROM dataset_regresi ORDER BY tanggal DESC LIMIT 30
-    ) AS sub ORDER BY tanggal ASC
-");
-$rows_chart = $q_chart->fetchAll(PDO::FETCH_ASSOC);
-
-foreach ($rows_chart as $r) {
-    $chart_labels[] = date('d M', strtotime($r['tanggal']));
-    $porsi          = (float)($r['jumlah_porsi'] ?? $r['y_porsi'] ?? 0);
-    $chart_actual[] = $porsi;
-
-    $x1 = (float)($r['x1_ayam'] ?? 0);
-    $x2 = (float)($r['x2_sapi'] ?? 0);
-    $x3 = (float)($r['x3_beras'] ?? 0);
-    $x4 = (float)($r['x4_bumbu_merah'] ?? 0);
-    $x5 = (float)($r['x5_bumbu_bawang'] ?? 0);
-    $x6 = (float)($r['x6_minyak'] ?? 0);
-
-    $chart_x1[] = $x1;
-    $chart_x2[] = $x2;
-    $chart_x3[] = $x3;
-    $chart_x4[] = $x4;
-    $chart_x5[] = $x5;
-    $chart_x6[] = $x6;
-
-    $y_pred = $b0 + ($b1 * $x1) + ($b2 * $x2) + ($b3 * $x3) + ($b4 * $x4) + ($b5 * $x5) + ($b6 * $x6);
-    $chart_predicted[] = round($y_pred, 2);
+$daftarMenuKasir = [];
+if ($role === 'kasir') {
+    try {
+        $daftarMenuKasir = $pdo->query('SELECT id, nama_menu, harga, is_menu_utama FROM master_menu ORDER BY is_menu_utama DESC, nama_menu')->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable) {
+        foreach (DAFTAR_MENU as $nama => $info) {
+            $daftarMenuKasir[] = ['id' => 0, 'nama_menu' => $nama, 'harga' => $info['harga']];
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -103,451 +60,201 @@ foreach ($rows_chart as $r) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($judul_halaman) ?> - Warung Jawa</title>
-    <?php require_once 'includes/header.php'; ?>
+    <title>Dashboard - Warung Jawa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="assets/css/app.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { primary: '#059669', secondary: '#6366f1' }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
-<div class="container mx-auto px-4 dashboard-content my-4">
-
-    <!-- 4 KPI Cards Atas -->
-    <?php require 'includes/kpi_cards.php'; ?>
-
-    <?php if ($page === 'menu'): ?>
-        <!-- ================= HALAMAN MANAJEMEN MENU ================= -->
-        <div class="modern-card mt-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-card-checklist me-2"></i> Manajemen Menu dan Resep</span>
-                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalTambahMenu">
-                    <i class="bi bi-plus-lg me-1"></i> Tambah Menu Baru
-                </button>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0" id="menuTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 5%">No</th>
-                                <th>Nama Menu</th>
-                                <th>Harga</th>
-                                <th>Resep Bahan</th>
-                                <th>Kategori</th>
-                                <th>Status</th>
-                                <th style="width: 15%" class="text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php
-                        $q_m = $pdo->query("SELECT * FROM master_menu ORDER BY id ASC");
-                        $menus = $q_m->fetchAll(PDO::FETCH_ASSOC);
-                        $no = 1;
-                        if (empty($menus)):
-                        ?>
-                            <tr><td colspan="7" class="text-center text-muted py-3">Belum ada data menu.</td></tr>
-                        <?php else: foreach ($menus as $m): ?>
-                            <tr>
-                                <td><?= $no++ ?></td>
-                                <td><strong><?= htmlspecialchars($m['nama_menu'] ?? '') ?></strong></td>
-                                <td>Rp <?= number_format($m['harga'] ?? 0, 0, ',', '.') ?></td>
-                                <td><?= htmlspecialchars($m['resep_bahan'] ?? '-') ?></td>
-                                <td><span class="badge bg-primary"><?= htmlspecialchars($m['kategori_x'] ?? 'X1') ?></span></td>
-                                <td><span class="badge bg-success"><?= htmlspecialchars($m['status'] ?? 'Utama') ?></span></td>
-                                <td class="text-center">
-                                    <button class="btn btn-sm btn-outline-primary btn-edit-menu"
-                                            data-id="<?= $m['id'] ?>"
-                                            data-nama="<?= htmlspecialchars($m['nama_menu'] ?? '') ?>"
-                                            data-harga="<?= $m['harga'] ?? 0 ?>"
-                                            data-resep="<?= htmlspecialchars($m['resep_bahan'] ?? '') ?>"
-                                            data-bs-toggle="modal" data-bs-target="#modalEditMenu">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </button>
-                                    <a href="aksi/hapus_menu.php?id=<?= $m['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus menu ini?')">
-                                        <i class="bi bi-trash"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        <?php endforeach; endif; ?>
-                        </tbody>
-                    </table>
+<body class="bg-slate-100 font-sans antialiased">
+    <div class="app-shell flex min-h-screen w-full bg-slate-100">
+        <?php include 'sidebar.php'; ?>
+        <main class="flex-1 p-8 overflow-y-auto min-w-0">
+            <header class="bg-white rounded-2xl shadow-sm border border-slate-200/80 px-6 py-4 mb-6 flex items-center justify-between">
+                <div>
+                    <h1 class="text-xl font-bold text-slate-800">Selamat Datang di Warung Jawa</h1>
+                    <p class="text-sm text-slate-500 mt-0.5">Berikut Ringkasan operasional Warung Jawa</p>
                 </div>
-            </div>
-        </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-slate-600"><?= htmlspecialchars($_SESSION['username'] ?? 'Pengguna') ?></span>
+                    <span class="<?= $badgeRole ?> px-2 py-0.5 rounded-md text-[11px] font-semibold"><?= htmlspecialchars($_SESSION['role'] ?? '-') ?></span>
+                </div>
+            </header>
 
-    <?php elseif (adalah_kasir()): ?>
-        <!-- ================= ROLE: KASIR ================= -->
-        <?php require_once 'includes/panel_kasir.php'; ?>
+            <?php if (!empty($_SESSION['flash'])): ?>
+                <?php $flash = $_SESSION['flash']; unset($_SESSION['flash']); ?>
+                <div class="mb-6 rounded-xl border px-4 py-3 text-sm <?= ($flash['tipe'] ?? '') === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800' ?>">
+                    <?= htmlspecialchars($flash['pesan'] ?? '') ?>
+                </div>
+            <?php endif; ?>
 
-    <?php elseif (adalah_admin()): ?>
-        <!-- ================= ROLE: ADMIN ================= -->
-        <div class="modern-card mt-4">
-            <div class="card-header"><span><i class="bi bi-clock me-2"></i> Operasional Harian</span></div>
-            <div class="card-body">
-                <div class="row g-4 align-items-center">
-                    <div class="col-md-6">
-                        <button type="button" class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#modalTambahStokMasuk">
-                            <i class="bi bi-box-arrow-in-down me-2"></i> Tambah Stok Masuk
-                        </button>
+            <?php if (empty($chart_labels)): ?>
+                <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-6">
+                    <div class="flex gap-3">
+                        <i class="bi bi-exclamation-triangle-fill text-amber-500 mt-0.5"></i>
+                        <div>
+                            <h3 class="text-sm font-semibold">Peringatan</h3>
+                            <p class="mt-1 text-sm">Tidak ada data regresi yang tersedia. Chart tidak akan menampilkan data.<?= $kpiError ? ' (' . htmlspecialchars($kpiError) . ')' : '' ?></p>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="text-end">
-                            <strong>Bahan Mendekati Batas Minimum:</strong>
-                            <span class="bg-warning text-dark ms-2 px-2 py-1 rounded">3 bahan</span>
+                </div>
+            <?php endif; ?>
+
+            <div class="grid gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-4">
+                <div class="bg-white rounded-xl border border-slate-200/80 border-l-4 border-l-blue-500 p-6 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="flex items-center space-x-3">
+                        <div class="h-12 w-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                            <i class="bi bi-box-seam text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">Total Stok (Kg)</p>
+                            <p class="text-2xl font-bold text-slate-900"><?= number_format($totalStokKg, 2) ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200/80 border-l-4 border-l-emerald-500 p-6 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="flex items-center space-x-3">
+                        <div class="h-12 w-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <i class="bi bi-basket text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">Penjualan Hari Ini (Porsi)</p>
+                            <p class="text-2xl font-bold text-slate-900"><?= number_format($penjualanHariIni) ?></p>
+                            <p class="text-xs text-slate-400 mt-0.5"><?= htmlspecialchars($penjualanSub) ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200/80 border-l-4 border-l-purple-500 p-6 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="flex items-center space-x-3">
+                        <div class="h-12 w-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                            <i class="bi bi-graph-up-arrow text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">Prediksi Besok (Porsi)</p>
+                            <p class="text-2xl font-bold text-slate-900"><?= number_format($prediksiBesok, 2) ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200/80 border-l-4 border-l-rose-500 p-6 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="flex items-center space-x-3">
+                        <div class="h-12 w-12 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+                            <i class="bi bi-exclamation-triangle text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">Bahan Stok Rendah</p>
+                            <p class="text-2xl font-bold text-rose-600"><?= number_format($bahanStokRendah) ?></p>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <?php
-        require 'includes/widget_aktivitas.php';
-        require 'includes/panel_admin.php';
-        ?>
 
-    <?php else: ?>
-        <!-- ================= ROLE: OWNER ================= -->
-        <!-- Panel Analitik Prediksi Bahan Baku Minggu Depan -->
-        <div class="modern-card mt-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-graph-up me-2"></i> Panel Analitik Prediksi Stok</span>
-                <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer me-1"></i> Cetak</button>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive mb-4">
-                    <table class="table table-bordered align-middle text-center mb-0">
-                        <thead class="table-primary">
-                            <tr>
-                                <th>No</th>
-                                <th>Bahan Baku</th>
-                                <th>Estimasi Kebutuhan Minggu Depan</th>
-                                <th>Satuan</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td>1</td><td>Ayam</td><td><strong><?= number_format($est_ayam, 2) ?></strong></td><td>Kg</td></tr>
-                            <tr><td>2</td><td>Sapi/Tetelan</td><td><strong><?= number_format($est_sapi, 2) ?></strong></td><td>Kg</td></tr>
-                            <tr><td>3</td><td>Beras</td><td><strong><?= number_format($est_beras, 2) ?></strong></td><td>Kg</td></tr>
-                            <tr><td>4</td><td>Bumbu Merah</td><td><strong><?= number_format($est_merah, 2) ?></strong></td><td>Kg</td></tr>
-                            <tr><td>5</td><td>Bumbu Bawang</td><td><strong><?= number_format($est_bawang, 2) ?></strong></td><td>Kg</td></tr>
-                            <tr><td>6</td><td>Minyak/Santan</td><td><strong><?= number_format($est_minyak, 2) ?></strong></td><td>Liter</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="p-3 bg-light rounded border mb-3">
-                    <div class="small fw-bold text-dark">Model Regresi Linier Berganda:</div>
-                    <div class="text-secondary small font-monospace">
-                        Y' = <?= number_format($b0, 3) ?> + <?= number_format($b1, 3) ?>(X₁) + <?= number_format($b2, 3) ?>(X₂) + <?= number_format($b3, 3) ?>(X₃) <?= $b4 >= 0 ? "+ $b4" : "- " . abs($b4) ?>(X₄) <?= $b5 >= 0 ? "+ $b5" : "- " . abs($b5) ?>(X₅) <?= $b6 >= 0 ? "+ $b6" : "- " . abs($b6) ?>(X₆)
+            <?php if ($role === 'kasir'): ?>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 mb-4">Transaksi Kasir</h2>
+                    <div class="grid md:grid-cols-3 gap-4">
+                        <?php foreach ($daftarMenuKasir as $menu): ?>
+                            <div class="border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
+                                <div class="font-medium text-slate-800"><?= htmlspecialchars($menu['nama_menu']) ?></div>
+                                <div class="text-emerald-600 font-semibold mt-1">Rp <?= number_format((float) $menu['harga'], 0, ',', '.') ?></div>
+                            </div>
+                        <?php endforeach; ?>
                     </div>
-                    <div class="small mt-1 text-muted">
-                        Nilai MAD: <strong><?= $mad ?></strong> | R²: <strong><?= $r2 ?></strong> | Total Estimasi Penjualan: <strong><?= number_format($total_estimasi_porsi, 2) ?> Porsi</strong>
-                    </div>
+                    <a href="aksi/menu.php" class="inline-flex mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition">Buka Manajemen Menu / POS</a>
                 </div>
-            </div>
-        </div>
+            <?php endif; ?>
 
-        <!-- Perhitungan Prediksi & Grafik Multivariabel 8 Garis -->
-        <section id="teknis" class="modern-card mt-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <div>
-                    <span><i class="bi bi-cpu me-2"></i> Perhitungan Prediksi Kebutuhan Bahan Baku</span>
-                    <span class="badge bg-info text-dark ms-2">R²: <?= $r2 ?></span>
-                    <span class="badge bg-secondary ms-1">MAD: <?= $mad ?></span>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="row g-3 align-items-center mb-3">
-                    <div class="col-md-6">
-                        <button type="button" id="hitungPrediksiBtn" class="btn btn-primary w-100">
-                            <i class="bi bi-brain me-2"></i> Hitung Prediksi Stok
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6">
+                <div class="flex justify-between items-start mb-4 gap-3">
+                    <h2 class="text-xl font-semibold text-slate-800">Grafik Prediksi Multivariabel</h2>
+                    <?php if (in_array($role, ['admin', 'owner'], true)): ?>
+                        <button id="hitungPrediksiBtn" type="button"
+                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition">
+                            Hitung Prediksi
                         </button>
-                    </div>
-                    <div class="col-md-6">
-                        <div id="statusModel" class="text-end small text-muted">Model aktif menggunakan data historis 30 hari.</div>
-                    </div>
+                    <?php endif; ?>
                 </div>
-
-                <div class="border rounded p-3 bg-white">
-                    <h6 class="mb-3"><i class="bi bi-graph-up-arrow me-2"></i> Grafik Multivariabel Penjualan dan Variabel Bahan Baku</h6>
-                    <div style="position: relative; height: 380px; width: 100%;">
-                        <canvas id="chartMultivariabel"></canvas>
-                    </div>
+                <div class="h-96">
+                    <canvas id="chartMultivariabel"></canvas>
                 </div>
             </div>
-            <?php
-            require 'includes/widget_aktivitas.php';
-            require 'includes/panel_owner.php';
-            ?>
-        </section>
-    <?php endif; ?>
-
-</div>
-
-<!-- ================= MODAL TAMBAH MENU ================= -->
-<div class="modal fade" id="modalTambahMenu" tabindex="-1" aria-labelledby="modalTambahMenuLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST" action="aksi/simpan_menu_baru.php">
-        <div class="modal-header">
-          <h5 class="modal-title" id="modalTambahMenuLabel">Tambah Menu Baru</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-              <label class="form-label">Nama Menu *</label>
-              <input type="text" class="form-control" name="nama_menu" placeholder="Contoh: Ayam Bakar Madu" required>
-          </div>
-          <div class="mb-3">
-              <label class="form-label">Harga (Rp) *</label>
-              <input type="number" min="0" step="100" class="form-control" name="harga" placeholder="25000" required>
-          </div>
-          <div class="row g-2 mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Bahan Baku *</label>
-              <select class="form-select" name="nama_bahan" id="selectBahanMenu" onchange="autoDetectKategori()" required>
-                <option value="" disabled selected>-- Pilih Bahan --</option>
-                <option value="Ayam" data-kat="X1" data-sat="Kg">Ayam (X1)</option>
-                <option value="Daging Sapi" data-kat="X2" data-sat="Kg">Daging Sapi (X2)</option>
-                <option value="Beras" data-kat="X3" data-sat="Kg">Beras (X3)</option>
-                <option value="Bumbu Merah" data-kat="X4" data-sat="Kg">Bumbu Merah (X4)</option>
-                <option value="Bumbu Bawang" data-kat="X5" data-sat="Kg">Bumbu Bawang (X5)</option>
-                <option value="Minyak" data-kat="X6" data-sat="Liter">Minyak Goreng/Santan (X6)</option>
-                <option value="Daun Ubi" data-kat="X1" data-sat="Ikat">Daun Ubi</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Pengali</label>
-              <input type="number" step="0.001" min="0" class="form-control" name="resep_pengali" value="0.250" required>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Satuan</label>
-              <input type="text" class="form-control bg-light" name="satuan" id="inputSatuanMenu" value="Kg" readonly>
-            </div>
-          </div>
-          <input type="hidden" name="kategori_x" id="inputKategoriMenu" value="X1">
-          <div class="p-2 bg-light border rounded small mb-3">
-            <strong>Kategori Terdeteksi: </strong><span id="badgeKategoriMenu" class="bg-primary">X1</span>
-          </div>
-          <div class="form-check">
-            <input type="checkbox" class="form-check-input" name="status_kasir" value="Utama" id="isMenuUtama" checked>
-            <label class="form-check-label small" for="isMenuUtama">Tampilkan di menu kasir</label>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-          <button type="submit" name="simpan_menu_baru" class="btn btn-primary">Simpan Menu</button>
-        </div>
-      </form>
+        </main>
     </div>
-  </div>
-</div>
 
-<!-- ================= MODAL EDIT MENU ================= -->
-<div class="modal fade" id="modalEditMenu" tabindex="-1" aria-labelledby="modalEditMenuLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST" action="aksi/update_menu.php">
-        <div class="modal-header">
-          <h5 class="modal-title" id="modalEditMenuLabel">Edit Menu</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <input type="hidden" name="id_menu" id="editIdMenu">
-          <div class="mb-3">
-              <label class="form-label">Nama Menu</label>
-              <input type="text" class="form-control" name="nama_menu" id="editNamaMenu" required>
-          </div>
-          <div class="mb-3">
-              <label class="form-label">Harga (Rp)</label>
-              <input type="number" min="0" class="form-control" name="harga" id="editHarga" required>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-          <button type="submit" class="btn btn-primary">Update Menu</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const btnHitung = document.getElementById('hitungPrediksiBtn');
+            if (btnHitung) {
+                btnHitung.addEventListener('click', function () {
+                    btnHitung.disabled = true;
+                    const originalHtml = btnHitung.innerHTML;
+                    btnHitung.innerHTML = 'Melatih Model...';
+                    fetch('aksi/latih_model.php', {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+                    })
+                    .then(res => res.text())
+                    .then(text => {
+                        let data;
+                        try { data = JSON.parse(text); }
+                        catch (e) { throw new Error(text ? text.slice(0, 280) : 'Respons pelatihan tidak valid'); }
+                        if (data.success) {
+                            Swal.fire({ icon: 'success', title: 'Berhasil!', text: data.message || 'Model regresi berhasil diperbarui.', timer: 1600, showConfirmButton: false })
+                                .then(() => location.reload());
+                        } else {
+                            Swal.fire({ icon: 'error', title: 'Gagal!', text: data.message || 'Gagal menghitung model.' });
+                        }
+                    })
+                    .catch(err => Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'Terjadi gangguan koneksi.' }))
+                    .finally(() => {
+                        btnHitung.disabled = false;
+                        btnHitung.innerHTML = originalHtml;
+                    });
+                });
+            }
 
-<!-- ================= MODAL TAMBAH STOK MASUK ADMIN ================= -->
-<div class="modal fade" id="modalTambahStokMasuk" tabindex="-1" aria-labelledby="modalTambahStokMasukLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST" action="aksi/tambah_stok_masuk.php">
-        <div class="modal-header bg-success text-white">
-          <h5 class="modal-title" id="modalTambahStokMasukLabel"><i class="bi bi-box-seam me-2"></i> Input Stok Masuk</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-              <label class="form-label">Tanggal Masuk</label>
-              <input type="date" class="form-control" name="tanggal" value="<?= date('Y-m-d') ?>" required>
-          </div>
-          <div class="mb-3">
-              <label class="form-label">Bahan Baku</label>
-              <select class="form-select" name="nama_bahan" id="bahanSelectAdmin" onchange="autoSatuanStokAdmin()" required>
-                <option value="" disabled selected>-- Pilih Bahan --</option>
-                <option value="Ayam" data-sat="Kg">Ayam (X1)</option>
-                <option value="Daging Sapi" data-sat="Kg">Daging Sapi (X2)</option>
-                <option value="Beras" data-sat="Kg">Beras (X3)</option>
-                <option value="Bumbu Merah" data-sat="Kg">Bumbu Merah (X4)</option>
-                <option value="Bumbu Bawang" data-sat="Kg">Bumbu Bawang (X5)</option>
-                <option value="Minyak" data-sat="Liter">Minyak Goreng/Santan (X6)</option>
-                <option value="Daun Ubi" data-sat="Ikat">Daun Ubi</option>
-              </select>
-          </div>
-          <div class="row g-2 mb-3">
-            <div class="col-8">
-              <label class="form-label">Jumlah Masuk</label>
-              <input type="number" step="0.01" min="0.01" class="form-control" name="jumlah_masuk" placeholder="0.00" required>
-            </div>
-            <div class="col-4">
-              <label class="form-label">Satuan</label>
-              <input type="text" class="form-control bg-light" name="satuan" id="satuanDisplayAdmin" readonly placeholder="Satuan">
-            </div>
-          </div>
-          <div class="mb-3">
-              <label class="form-label">Keterangan / Sumber</label>
-              <input type="text" class="form-control" name="keterangan" placeholder="Contoh: Belanja Pasar Pagi / Suplai">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-          <button type="submit" name="simpan_stok_masuk" class="btn btn-success">Simpan Stok Masuk</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-
-<!-- ================= JAVASCRIPT LOGIC ================= -->
-<script>
-function autoDetectKategori() {
-    const sel = document.getElementById('selectBahanMenu');
-    const opt = sel.options[sel.selectedIndex];
-    const kat = opt.getAttribute('data-kat') || 'X1';
-    const sat = opt.getAttribute('data-sat') || 'Kg';
-
-    document.getElementById('inputKategoriMenu').value = kat;
-    document.getElementById('badgeKategoriMenu').textContent = kat;
-    document.getElementById('inputSatuanMenu').value = sat;
-}
-
-function autoSatuanStokAdmin() {
-    const sel = document.getElementById('bahanSelectAdmin');
-    const opt = sel.options[sel.selectedIndex];
-    const sat = opt.getAttribute('data-sat') || 'Kg';
-    document.getElementById('satuanDisplayAdmin').value = sat;
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-    // 1. Inisialisasi Tombol Hitung Prediksi
-    const btnHitung = document.getElementById('hitungPrediksiBtn');
-    if (btnHitung) {
-        btnHitung.addEventListener('click', function () {
-            btnHitung.disabled = true;
-            const originalHtml = btnHitung.innerHTML;
-            btnHitung.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Melatih Model...';
-
-            fetch('aksi/latih_model.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Berhasil!',
-                        text: data.message || 'Model regresi berhasil diperbarui.',
-                        timer: 1500,
-                        showConfirmButton: false
-                    }).then(() => location.reload());
-                } else {
-                    Swal.fire({ icon: 'error', title: 'Gagal!', text: data.message || 'Gagal menghitung model.' });
-                }
-                btnHitung.disabled = false;
-                btnHitung.innerHTML = originalHtml;
-            })
-            .catch(err => {
-                console.error(err);
-                Swal.fire({ icon: 'error', title: 'Error', text: 'Terjadi gangguan koneksi.' });
-                btnHitung.disabled = false;
-                btnHitung.innerHTML = originalHtml;
-            });
-        });
-    }
-
-    // 2. Inisialisasi Grafik Multivariabel 8 Garis (Jika canvas ada)
-    const canvasChart = document.getElementById('chartMultivariabel');
-    if (canvasChart) {
-        const ctx = canvasChart.getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: <?= json_encode($chart_labels) ?>,
-                datasets: [
-                    {
-                        label: 'Penjualan Aktual (Y)',
-                        data: <?= json_encode($chart_actual) ?>,
-                        borderColor: '#e02424',
-                        backgroundColor: '#e02424',
-                        yAxisID: 'y',
-                        tension: 0,
-                        pointRadius: 2.5
+            const canvasChart = document.getElementById('chartMultivariabel');
+            if (canvasChart && typeof Chart !== 'undefined') {
+                new Chart(canvasChart.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: <?= json_encode($chart_labels) ?>,
+                        datasets: [
+                            { label: 'Penjualan Aktual (Y)', data: <?= json_encode($chart_actual) ?>, borderColor: '#e02424', backgroundColor: '#e02424', yAxisID: 'y', tension: 0, pointRadius: 2.5 },
+                            { label: "Total Prediksi (Y')", data: <?= json_encode($chart_predicted) ?>, borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderDash: [5, 5], yAxisID: 'y', tension: 0, pointRadius: 2.5 },
+                            { label: 'X1: Ayam', data: <?= json_encode($chart_x1) ?>, borderColor: '#3b82f6', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X2: Sapi/Tetelan', data: <?= json_encode($chart_x2) ?>, borderColor: '#8b5cf6', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X3: Beras', data: <?= json_encode($chart_x3) ?>, borderColor: '#10b981', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X4: Bumbu Merah', data: <?= json_encode($chart_x4) ?>, borderColor: '#ec4899', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X5: Bumbu Bawang', data: <?= json_encode($chart_x5) ?>, borderColor: '#eab308', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X6: Minyak/Santan', data: <?= json_encode($chart_x6) ?>, borderColor: '#06b6d4', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X7: Telur', data: <?= json_encode($chart_x7) ?>, borderColor: '#84cc16', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X8: Seafood', data: <?= json_encode($chart_x8) ?>, borderColor: '#0ea5e9', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X9: Jeroan', data: <?= json_encode($chart_x9) ?>, borderColor: '#f97316', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X10: Jengkol', data: <?= json_encode($chart_x10) ?>, borderColor: '#facc15', yAxisID: 'y1', tension: 0, pointRadius: 2 },
+                            { label: 'X11: Tahu Tempe', data: <?= json_encode($chart_x11) ?>, borderColor: '#6366f1', yAxisID: 'y1', tension: 0, pointRadius: 2 }
+                        ]
                     },
-                    {
-                        label: 'Total Prediksi (Y\')',
-                        data: <?= json_encode($chart_predicted) ?>,
-                        borderColor: '#f59e0b',
-                        backgroundColor: '#f59e0b',
-                        borderDash: [5, 5],
-                        yAxisID: 'y',
-                        tension: 0,
-                        pointRadius: 2.5
-                    },
-                    { label: 'X1: Ayam', data: <?= json_encode($chart_x1) ?>, borderColor: '#3b82f6', yAxisID: 'y1', tension: 0, pointRadius: 2 },
-                    { label: 'X2: Sapi/Tetelan', data: <?= json_encode($chart_x2) ?>, borderColor: '#8b5cf6', yAxisID: 'y1', tension: 0, pointRadius: 2 },
-                    { label: 'X3: Beras', data: <?= json_encode($chart_x3) ?>, borderColor: '#10b981', yAxisID: 'y1', tension: 0, pointRadius: 2 },
-                    { label: 'X4: Bumbu Merah', data: <?= json_encode($chart_x4) ?>, borderColor: '#ec4899', yAxisID: 'y1', tension: 0, pointRadius: 2 },
-                    { label: 'X5: Bumbu Bawang', data: <?= json_encode($chart_x5) ?>, borderColor: '#eab308', yAxisID: 'y1', tension: 0, pointRadius: 2 },
-                    { label: 'X6: Minyak/Santan', data: <?= json_encode($chart_x6) ?>, borderColor: '#06b6d4', yAxisID: 'y1', tension: 0, pointRadius: 2 }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        type: 'linear',
-                        position: 'left',
-                        title: { display: true, text: 'Penjualan (Porsi)' }
-                    },
-                    y1: {
-                        type: 'linear',
-                        position: 'right',
-                        grid: { drawOnChartArea: false },
-                        title: { display: true, text: 'Variabel Bahan Baku' },
-                        min: 0,
-                        max: 15
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { type: 'linear', position: 'left', title: { display: true, text: 'Penjualan (Porsi)' } },
+                            y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Variabel Bahan Baku' }, min: 0 }
+                        }
                     }
-                }
+                });
             }
         });
-    }
-
-    // 3. Edit Menu Handler
-    document.querySelectorAll('.btn-edit-menu').forEach(button => {
-        button.addEventListener('click', function () {
-            document.getElementById('editIdMenu').value = this.dataset.id;
-            document.getElementById('editNamaMenu').value = this.dataset.nama;
-            document.getElementById('editHarga').value = this.dataset.harga;
-        });
-
-    });
-});
-</script>
-
-<?php require_once 'includes/footer.php'; ?>
+    </script>
 </body>
 </html>

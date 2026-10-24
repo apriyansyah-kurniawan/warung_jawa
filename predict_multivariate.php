@@ -8,7 +8,6 @@
  * -------------------------------------------------------------------------
  */
 
-// Mencegah output HTML error mengotori JSON
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
@@ -16,7 +15,14 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-header('Content-Type: application/json; charset=utf-8');
+$isPost = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
+$wantsJson = $isPost
+    || (isset($_GET['format']) && $_GET['format'] === 'json')
+    || (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
+
+if ($wantsJson) {
+    header('Content-Type: application/json; charset=utf-8');
+}
 
 // Pastikan hanya Admin dan Owner yang bisa mengakses endpoint ini
 require_once 'config.php';
@@ -212,30 +218,111 @@ if ($method === 'POST') {
     ]);
     exit;
 } else {
-    // GET request - informasi geral
     $model_info = ambil_koefisien_aktif($pdo);
 
-    echo json_encode([
-        'success' => true,
-        'message' => 'Endpoint untuk prediksi multivariat menggunakan model regresi linier berganda',
-        'available_actions' => [
-            'POST' => 'Mengirimkan input X1-X6 untuk mendapatkan prediksi Y (jumlah porsi)'
-        ],
-        'model_status' => $model_info['success'] ? 'tersedia' : 'belum tersedia',
-        'model_info' => $model_info['success'] ? [
-            'beta0' => $model_info['beta0'],
-            'beta1' => $model_info['beta1'],
-            'beta2' => $model_info['beta2'],
-            'beta3' => $model_info['beta3'],
-            'beta4' => $model_info['beta4'],
-            'beta5' => $model_info['beta5'],
-            'beta6' => $model_info['beta6'],
-            'mad' => $model_info['mad'],
-            'r_square' => $model_info['r_square'],
-            'jumlah_data_training' => $model_info['jumlah_data_training'],
-            'tanggal_training' => $model_info['tanggal_training']
-        ] : null
-    ]);
+    if ($wantsJson) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'Endpoint untuk prediksi multivariat menggunakan model regresi linier berganda',
+            'available_actions' => [
+                'POST' => 'Mengirimkan input X1-X6 untuk mendapatkan prediksi Y (jumlah porsi)'
+            ],
+            'model_status' => $model_info['success'] ? 'tersedia' : 'belum tersedia',
+            'model_info' => $model_info['success'] ? [
+                'beta0' => $model_info['beta0'],
+                'beta1' => $model_info['beta1'],
+                'beta2' => $model_info['beta2'],
+                'beta3' => $model_info['beta3'],
+                'beta4' => $model_info['beta4'],
+                'beta5' => $model_info['beta5'],
+                'beta6' => $model_info['beta6'],
+                'mad' => $model_info['mad'],
+                'r_square' => $model_info['r_square'],
+                'jumlah_data_training' => $model_info['jumlah_data_training'],
+                'tanggal_training' => $model_info['tanggal_training']
+            ] : null
+        ]);
+        exit;
+    }
+
+    header_remove('Content-Type');
+    $judul_halaman = 'Prediksi Stok';
+    $page_aktif = 'predict_multivariate';
+    $xTerbaru = [];
+    $prediksiContoh = 0;
+    try {
+        $xTerbaru = $pdo->query('SELECT * FROM dataset_regresi ORDER BY tanggal DESC LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: [];
+        if ($model_info['success'] && $xTerbaru) {
+            $prediksiContoh = hitung_prediksi_multivariat(
+                $model_info,
+                (float) ($xTerbaru['x1_ayam'] ?? 0),
+                (float) ($xTerbaru['x2_sapi'] ?? 0),
+                (float) ($xTerbaru['x3_beras'] ?? 0),
+                (float) ($xTerbaru['x4_bumbu_merah'] ?? 0),
+                (float) ($xTerbaru['x5_bumbu_bawang'] ?? 0),
+                (float) ($xTerbaru['x6_minyak'] ?? 0)
+            );
+        }
+    } catch (Throwable) {
+        $xTerbaru = [];
+    }
+    require_once __DIR__ . '/includes/header.php';
+    ?>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-slate-800 mb-2">Status Model</h2>
+        <p class="text-sm text-slate-600">
+            <?= $model_info['success'] ? 'Model tersedia. R² ' . htmlspecialchars((string) $model_info['r_square']) . ' · MAD ' . htmlspecialchars((string) $model_info['mad']) : htmlspecialchars($model_info['message'] ?? 'Model belum dilatih.') ?>
+        </p>
+        <p class="text-2xl font-bold text-purple-700 mt-4"><?= number_format($prediksiContoh, 2) ?> porsi</p>
+        <p class="text-xs text-slate-500 mt-1">Estimasi berdasarkan data regresi terbaru<?= !empty($xTerbaru['tanggal']) ? ' (' . htmlspecialchars($xTerbaru['tanggal']) . ')' : '' ?>.</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6">
+        <h2 class="text-lg font-semibold text-slate-800 mb-4">Hitung Prediksi Manual (X1–X6)</h2>
+        <form method="POST" action="predict_multivariate.php" class="grid md:grid-cols-3 gap-4" id="formPrediksi">
+            <?php
+            $fields = [
+                'x1' => ['Ayam', $xTerbaru['x1_ayam'] ?? 0],
+                'x2' => ['Sapi/Tetelan', $xTerbaru['x2_sapi'] ?? 0],
+                'x3' => ['Beras', $xTerbaru['x3_beras'] ?? 0],
+                'x4' => ['Bumbu Merah', $xTerbaru['x4_bumbu_merah'] ?? 0],
+                'x5' => ['Bumbu Bawang', $xTerbaru['x5_bumbu_bawang'] ?? 0],
+                'x6' => ['Minyak/Santan', $xTerbaru['x6_minyak'] ?? 0],
+            ];
+            foreach ($fields as $name => [$label, $val]):
+            ?>
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1"><?= htmlspecialchars($label) ?></label>
+                    <input type="number" step="0.01" name="<?= $name ?>" value="<?= htmlspecialchars((string) $val) ?>" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                </div>
+            <?php endforeach; ?>
+            <div class="md:col-span-3">
+                <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition">Hitung</button>
+            </div>
+        </form>
+        <pre id="hasilPrediksi" class="mt-4 text-sm bg-slate-50 border border-slate-200 rounded-xl p-4 hidden"></pre>
+    </div>
+    <script>
+        document.getElementById('formPrediksi').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const body = new URLSearchParams(new FormData(this));
+            fetch('predict_multivariate.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })
+                .then(r => r.json())
+                .then(data => {
+                    const el = document.getElementById('hasilPrediksi');
+                    el.classList.remove('hidden');
+                    el.textContent = data.success
+                        ? ('Prediksi: ' + Number(data.prediksi).toFixed(2) + ' porsi')
+                        : (data.message || 'Gagal menghitung prediksi');
+                })
+                .catch(() => {
+                    const el = document.getElementById('hasilPrediksi');
+                    el.classList.remove('hidden');
+                    el.textContent = 'Gagal menghubungi endpoint prediksi.';
+                });
+        });
+    </script>
+    <?php
+    require_once __DIR__ . '/includes/footer.php';
     exit;
 }
 ?>

@@ -13,11 +13,70 @@
 
 * { box-sizing: border-box; }
 
-body {
+html, body {
     margin: 0;
+    min-height: 100%;
+}
+
+body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background: var(--content-bg);
+    background: #f1f5f9;
     min-height: 100vh;
+}
+
+/* Layout dua kolom: sidebar tidak boleh tertimpa konten */
+.app-shell {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch;
+    min-height: 100vh;
+    width: 100%;
+    position: relative;
+    isolation: isolate;
+    background: #f1f5f9;
+}
+
+.app-shell > aside,
+aside.w-64 {
+    width: 16rem !important;
+    min-width: 16rem !important;
+    max-width: 16rem !important;
+    background: #1f242d !important;
+    color: #e2e8f0 !important;
+    position: sticky !important;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    z-index: 40 !important;
+    pointer-events: auto !important;
+    flex-shrink: 0 !important;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.app-shell > aside a,
+aside.w-64 a {
+    position: relative;
+    z-index: 50;
+    pointer-events: auto !important;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.app-shell > main,
+main.flex-1 {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    position: relative;
+    z-index: 1 !important;
+    overflow-x: hidden;
+}
+
+.sidebar-overlay {
+    display: none !important;
+    pointer-events: none !important;
 }
 
 /* ===== LAYOUT SIDEBAR + CONTENT ===== */
@@ -30,13 +89,12 @@ body {
     width: var(--sidebar-width);
     background: var(--sidebar-bg);
     color: #e9ecef;
-    position: fixed;
-    top: 0; left: 0; bottom: 0;
-    z-index: 1040;
+    position: relative;
+    z-index: 40;
     display: flex;
     flex-direction: column;
-    transition: transform 0.3s ease;
     overflow-y: auto;
+    pointer-events: auto;
 }
 
 .sidebar-brand {
@@ -88,10 +146,11 @@ body {
 
 .app-main {
     flex: 1;
-    margin-left: var(--sidebar-width);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 1;
 }
 
 .app-topbar {
@@ -103,11 +162,12 @@ body {
     justify-content: space-between;
     position: sticky;
     top: 0;
-    z-index: 1020;
+    z-index: 5;
 }
 
 .app-content { padding: 1.5rem; flex: 1; }
-.container.dashboard-content {
+
+.dashboard-content {
     max-width: 1400px;
 }
 
@@ -125,7 +185,13 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.5);
-    z-index: 1035;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.sidebar-overlay.show {
+    display: block;
+    pointer-events: auto;
 }
 
 /* ===== KPI CARDS ===== */

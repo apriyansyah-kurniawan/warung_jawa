@@ -4,43 +4,108 @@
  */
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/auth.php';
+cek_login();
 
-// Helper to check if request is AJAX
 function isAjax(): bool {
     return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 }
 
-// Role check: only admin and owner allowed
-$user_role = strtolower($_SESSION['role'] ?? '');
-if (!in_array($user_role, ['admin', 'owner'])) {
+$user_role = strtolower((string) ($_SESSION['role'] ?? ''));
+$action = $_POST['action'] ?? $_GET['action'] ?? '';
+
+if ($action === '' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $judul_halaman = 'Manajemen Menu';
+    $page_aktif = 'menu';
+    $daftar_menu = [];
+    try {
+        $daftar_menu = $pdo->query('SELECT * FROM master_menu ORDER BY nama_menu')->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable) {
+        $daftar_menu = [];
+    }
+    require_once __DIR__ . '/../includes/header.php';
+    ?>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 mb-6">
+        <?php if (in_array($user_role, ['admin', 'owner'], true)): ?>
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Tambah Menu</h2>
+            <form method="POST" action="menu.php" class="grid md:grid-cols-3 gap-4">
+                <input type="hidden" name="action" value="create">
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1">Nama Menu</label>
+                    <input type="text" name="nama_menu" required class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1">Harga</label>
+                    <input type="number" name="harga" min="1" required class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1">Bahan Resep</label>
+                    <input type="text" name="resep_nama_bahan" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1">Pengali / Porsi</label>
+                    <input type="number" name="resep_pengali" step="0.001" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1">Satuan</label>
+                    <select name="resep_satuan" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                        <?php foreach (DAFTAR_SATUAN as $s): ?><option><?= htmlspecialchars($s) ?></option><?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="flex items-end gap-2">
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-600">
+                        <input type="checkbox" name="is_menu_utama" value="1" class="rounded"> Menu utama
+                    </label>
+                    <button type="submit" class="ml-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition">Simpan</button>
+                </div>
+            </form>
+        <?php else: ?>
+            <h2 class="text-lg font-semibold text-slate-800 mb-2">Katalog Menu Kasir</h2>
+            <p class="text-sm text-slate-500">Pilih menu untuk transaksi harian. Pengelolaan resep hanya untuk Admin/Owner.</p>
+        <?php endif; ?>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6">
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <?php foreach ($daftar_menu as $menu): ?>
+                <div class="border border-slate-200 rounded-xl p-4">
+                    <div class="font-semibold text-slate-800"><?= htmlspecialchars($menu['nama_menu']) ?></div>
+                    <div class="text-emerald-600 font-medium mt-1">Rp <?= number_format((float) $menu['harga'], 0, ',', '.') ?></div>
+                    <?php if (!empty($menu['resep_nama_bahan'])): ?>
+                        <div class="text-xs text-slate-500 mt-2">Resep: <?= htmlspecialchars($menu['resep_nama_bahan']) ?></div>
+                    <?php endif; ?>
+                    <?php if (in_array($user_role, ['admin', 'owner'], true)): ?>
+                        <form method="POST" action="menu.php" class="mt-3" onsubmit="return confirm('Hapus menu ini?')">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="id" value="<?= (int) $menu['id'] ?>">
+                            <button class="text-sm text-rose-600 hover:underline" type="submit">Hapus</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php
+    require_once __DIR__ . '/../includes/footer.php';
+    exit;
+}
+
+if (!in_array($user_role, ['admin', 'owner'], true)) {
     if (isAjax()) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'Akses ditolak.']);
     } else {
-        $_SESSION['flash'] = [
-            'tipe' => 'danger',
-            'pesan' => 'Akses ditolak. Hanya Admin/Owner yang diizinkan.'
-        ];
-        header('Location: ../index.php');
+        $_SESSION['flash'] = ['tipe' => 'danger', 'pesan' => 'Akses ditolak. Hanya Admin/Owner yang diizinkan mengubah menu.'];
+        header('Location: menu.php');
     }
     exit;
 }
 
-// Get request method and action
-$method = $_SERVER['REQUEST_METHOD'];
-$action = $_POST['action'] ?? $_GET['action'] ?? '';
-
-// Validate action
-if (!in_array($action, ['create', 'update', 'delete'])) {
+if (!in_array($action, ['create', 'update', 'delete'], true)) {
     if (isAjax()) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Aksi tidak valid']);
     } else {
-        $_SESSION['flash'] = [
-            'tipe' => 'danger',
-            'pesan' => 'Aksi tidak valid'
-        ];
-        header('Location: ../index.php');
+        $_SESSION['flash'] = ['tipe' => 'danger', 'pesan' => 'Aksi tidak valid'];
+        header('Location: menu.php');
     }
     exit;
 }
@@ -99,7 +164,7 @@ try {
                     'tipe' => 'success',
                     'pesan' => 'Menu berhasil ditambahkan'
                 ];
-                header('Location: ../index.php?page=menu');
+                header('Location: menu.php');
                 exit;
             }
             break;
@@ -168,7 +233,7 @@ try {
                     'tipe' => 'success',
                     'pesan' => 'Menu berhasil diperbarui'
                 ];
-                header('Location: ../index.php?page=menu');
+                header('Location: menu.php');
                 exit;
             }
             break;
@@ -209,7 +274,7 @@ try {
                     'tipe' => 'success',
                     'pesan' => 'Menu berhasil dihapus'
                 ];
-                header('Location: ../index.php?page=menu');
+                header('Location: menu.php');
                 exit;
             }
             break;
@@ -226,7 +291,7 @@ try {
             'tipe' => 'danger',
             'pesan' => $e->getMessage()
         ];
-        header('Location: ../index.php?page=menu');
+        header('Location: menu.php');
         exit;
     }
 } catch (PDOException $e) {
@@ -241,7 +306,7 @@ try {
             'tipe' => 'danger',
             'pesan' => 'Database error: ' . $e->getMessage()
         ];
-        header('Location: ../index.php?page=menu');
+        header('Location: menu.php');
         exit;
     }
 }

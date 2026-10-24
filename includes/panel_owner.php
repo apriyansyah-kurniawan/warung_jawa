@@ -17,8 +17,10 @@ $log_stok_masuk = $pdo->query('
 ')->fetchAll();
 
 $daftar_bahan = $pdo->query('SELECT DISTINCT nama_bahan FROM stok_keluar ORDER BY nama_bahan')->fetchAll(PDO::FETCH_COLUMN);
+$owner_view = $page ?? 'beranda';
 ?>
 
+<?php if ($owner_view === 'stok-masuk'): ?>
 <div class="modern-card" id="stok-masuk">
     <div class="card-header"><span><i class="bi bi-box-arrow-in-down"></i> Stok Masuk / Refill</span></div>
     <div class="card-body">
@@ -56,7 +58,9 @@ $daftar_bahan = $pdo->query('SELECT DISTINCT nama_bahan FROM stok_keluar ORDER B
     </form>
     </div>
 </div>
+<?php endif; ?>
 
+<?php if ($owner_view === 'beranda'): ?>
 <div class="modern-card">
     <div class="card-header">
         <span><i class="bi bi-currency-dollar"></i> Data Penjualan</span>
@@ -190,4 +194,4 @@ document.getElementById('modalHapusAdmin')?.addEventListener('show.bs.modal', fu
     }
 });
 </script>
-<?php require __DIR__ . '/panel_prediksi.php'; ?>
+<?php endif; ?>

@@ -64,8 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $total_harga = $harga * $jumlah;
 
         // Simpan transaksi penjualan
-        $stmt = $pdo->prepare("INSERT INTO penjualan (id_user, nama_menu, total_harga, tanggal) VALUES (?, ?, ?, NOW())");
-        $result = $stmt->execute([$id_user, $nama_menu, $total_harga]);
+        $stmt = $pdo->prepare("INSERT INTO penjualan (id_user, nama_menu, jumlah_porsi, total_harga, tanggal) VALUES (?, ?, ?, ?, CURDATE())");
+        $result = $stmt->execute([$id_user, $nama_menu, $jumlah, $total_harga]);
 
         if ($result) {
             $successCount++;

@@ -4,14 +4,19 @@
  * -------------------------------------------------------------------------
  * Skrip ini mengagregasi data dari stok_keluar dan penjualan
  * untuk membentuk dataset yang sesuai dengan persamaan regresi linier berganda:
- * Y = β0 + β1*X1 + β2*X2 + β3*X3 + β4*X4 + β5*X5 + β6*X6
+ * Y = β0 + β1*X1 + β2*X2 + β3*X3 + β4*X4 + β5*X5 + β6*X6 + β7*X7 + β8*X8 + β9*X9 + β10*X10 + β11*X11
  *
- * X1: Ayam
- * X2: Sapi/Tetelan
- * X3: Beras
- * X4: Bumbu Merah
- * X5: Bumbu Bawang
- * X6: Minyak/Santan
+ * X1: Ayam / Olahan Ayam
+ * X2: Daging Sapi / Tetelan
+ * X3: Beras (Nasi)
+ * X4: Bumbu Merah / Cabai / Tomat
+ * X5: Bumbu Bawang (Bawang Merah & Putih)
+ * X6: Minyak Goreng / Santan
+ * X7: Telur (Ayam & Puyuh)
+ * X8: Seafood & Ikan (Cumi, Udang, Ikan Asin)
+ * X9: Jeroan / Lauk Tambahan (Ati Ampela, Ceker)
+ * X10: Jengkol
+ * X11: Olahan Kedelai (Tahu & Tempe)
  * Y: jumlah_porsi (total penjualan per hari)
  * -------------------------------------------------------------------------
  */
@@ -32,7 +37,7 @@ try {
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 
-    // Ambil data stok_keluar yang sudah dikonversi ke kategori X1-X6
+    // Ambil data stok_keluar yang sudah dikonversi ke kategori X1-X11
     $sqlStok = "
         SELECT
             DATE(s.tanggal) as tanggal,
@@ -41,10 +46,15 @@ try {
             SUM(CASE WHEN m.kategori_x = 'X3' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x3_beras,
             SUM(CASE WHEN m.kategori_x = 'X4' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x4_bumbu_merah,
             SUM(CASE WHEN m.kategori_x = 'X5' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x5_bumbu_bawang,
-            SUM(CASE WHEN m.kategori_x = 'X6' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x6_minyak
+            SUM(CASE WHEN m.kategori_x = 'X6' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x6_minyak,
+            SUM(CASE WHEN m.kategori_x = 'X7' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x7_telur,
+            SUM(CASE WHEN m.kategori_x = 'X8' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x8_seafood,
+            SUM(CASE WHEN m.kategori_x = 'X9' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x9_jeroan,
+            SUM(CASE WHEN m.kategori_x = 'X10' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x10_jengkol,
+            SUM(CASE WHEN m.kategori_x = 'X11' THEN s.jumlah_terpakai * m.faktor_konversi ELSE 0 END) as x11_tahu_tempe
         FROM stok_keluar s
         JOIN mapping_bahan m ON s.nama_bahan = m.nama_bahan
-        WHERE m.kategori_x IN ('X1','X2','X3','X4','X5','X6')
+        WHERE m.kategori_x IN ('X1','X2','X3','X4','X5','X6','X7','X8','X9','X10','X11')
         GROUP BY DATE(s.tanggal)
     ";
 
@@ -83,6 +93,11 @@ try {
             (float)$row['x4_bumbu_merah'] > 0 ||
             (float)$row['x5_bumbu_bawang'] > 0 ||
             (float)$row['x6_minyak'] > 0 ||
+            (float)$row['x7_telur'] > 0 ||
+            (float)$row['x8_seafood'] > 0 ||
+            (float)$row['x9_jeroan'] > 0 ||
+            (float)$row['x10_jengkol'] > 0 ||
+            (float)$row['x11_tahu_tempe'] > 0 ||
             $jumlahPorsi > 0
         ) {
             $datasetToInsert[] = [
@@ -93,6 +108,11 @@ try {
                 'x4_bumbu_merah' => (float)$row['x4_bumbu_merah'],
                 'x5_bumbu_bawang' => (float)$row['x5_bumbu_bawang'],
                 'x6_minyak' => (float)$row['x6_minyak'],
+                'x7_telur' => (float)$row['x7_telur'],
+                'x8_seafood' => (float)$row['x8_seafood'],
+                'x9_jeroan' => (float)$row['x9_jeroan'],
+                'x10_jengkol' => (float)$row['x10_jengkol'],
+                'x11_tahu_tempe' => (float)$row['x11_tahu_tempe'],
                 'jumlah_porsi' => $jumlahPorsi
             ];
         }
@@ -105,9 +125,9 @@ try {
     if (!empty($datasetToInsert)) {
         $sqlInsert = "
             INSERT INTO dataset_regresi
-            (tanggal, x1_ayam, x2_sapi, x3_beras, x4_bumbu_merah, x5_bumbu_bawang, x6_minyak, jumlah_porsi)
+            (tanggal, x1_ayam, x2_sapi, x3_beras, x4_bumbu_merah, x5_bumbu_bawang, x6_minyak, x7_telur, x8_seafood, x9_jeroan, x10_jengkol, x11_tahu_tempe, jumlah_porsi)
             VALUES
-            (:tanggal, :x1_ayam, :x2_sapi, :x3_beras, :x4_bumbu_merah, :x5_bumbu_bawang, :x6_minyak, :jumlah_porsi)
+            (:tanggal, :x1_ayam, :x2_sapi, :x3_beras, :x4_bumbu_merah, :x5_bumbu_bawang, :x6_minyak, :x7_telur, :x8_seafood, :x9_jeroan, :x10_jengkol, :x11_tahu_tempe, :jumlah_porsi)
         ";
 
         $stmtInsert = $pdo->prepare($sqlInsert);

@@ -43,8 +43,14 @@ if (!empty($_GET['edit'])) {
 $total_users     = count($daftar_users);
 $total_penjualan = (float) $pdo->query('SELECT COALESCE(SUM(total_harga),0) FROM penjualan')->fetchColumn();
 $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchColumn();
+
+$admin_view = $page ?? 'beranda';
+$show_users_panel = $admin_view === 'users';
+$show_menu_panel  = $admin_view === 'menu';
+$show_monitor     = $admin_view === 'beranda';
 ?>
 
+<?php if ($show_users_panel): ?>
 <!-- Manajemen User -->
 <div class="modern-card" id="users">
     <div class="card-header"><span><i class="bi bi-people"></i> Manajemen User</span></div>
@@ -107,7 +113,9 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
         </div>
     </div>
 </div>
+<?php endif; ?>
 
+<?php if ($show_menu_panel): ?>
 <!-- Manajemen Menu dan Resep -->
 <div class="modern-card" id="menu-management">
     <div class="card-header">
@@ -379,7 +387,9 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
         </div>
     </div>
 </div>
+<?php endif; ?>
 
+<?php if ($show_monitor): ?>
 <!-- Monitoring penjualan & stok -->
 <div class="row g-4 mb-4">
     <div class="col-lg-6">
@@ -458,6 +468,7 @@ $total_stok_log  = (int) $pdo->query('SELECT COUNT(*) FROM stok_keluar')->fetchC
         </div>
     </div>
 </div>
+<?php endif; ?>
 
 <script>
 // Load DataTables CSS and JS dynamically if not already loaded
@@ -504,6 +515,9 @@ if (typeof jQuery === 'undefined' || !jQuery.fn.dataTable) {
 }
 
 function initializeDataTable() {
+    if (!document.getElementById('menuTable') || typeof jQuery === 'undefined' || !jQuery.fn.dataTable) {
+        return;
+    }
     $('#menuTable').DataTable({
         "language": {
             "url": "//cdn.datatables.net/plug-ins/1.13.7/i18n/id.json"

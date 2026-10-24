@@ -15,9 +15,19 @@ function mulai_session(): void
  * Validasi login + cek timeout 15 menit.
  * Redirect ke login.php jika sesi habis atau belum login.
  */
+function path_relatif_akar(): string
+{
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (str_contains($script, '/aksi/') || str_contains($script, '/export/')) {
+        return '../';
+    }
+    return '';
+}
+
 function cek_login(): void
 {
     mulai_session();
+    $akar = path_relatif_akar();
 
     // Cek timeout session (15 menit tidak ada aktivitas)
     if (!empty($_SESSION['user_id']) && isset($_SESSION['last_activity'])) {
@@ -25,13 +35,13 @@ function cek_login(): void
         if ($idle > SESSION_TIMEOUT) {
             session_unset();
             session_destroy();
-            header('Location: login.php?timeout=1');
+            header('Location: ' . $akar . 'login.php?timeout=1');
             exit;
         }
     }
 
     if (empty($_SESSION['user_id'])) {
-        header('Location: login.php');
+        header('Location: ' . $akar . 'login.php');
         exit;
     }
 
@@ -55,7 +65,7 @@ function cek_role(array $role_diizinkan): void
             'tipe'  => 'danger',
             'pesan' => 'Anda tidak memiliki hak akses ke halaman ini.',
         ];
-        header('Location: index.php');
+        header('Location: ' . path_relatif_akar() . 'index.php');
         exit;
     }
 }

@@ -7,9 +7,9 @@ define('DB_PASS', '');
 
 if (!defined('PYTHON_PATH')) {
     // 1. Prioritaskan virtual environment lokal proyek jika ada
-    if (file_exists(__DIR__ . '/venv/bin/python3')) {
+    if (is_file(__DIR__ . '/venv/bin/python3')) {
         define('PYTHON_PATH', __DIR__ . '/venv/bin/python3');
-    } elseif (file_exists(__DIR__ . '/../venv/bin/python3')) {
+    } elseif (is_file(__DIR__ . '/../venv/bin/python3')) {
         define('PYTHON_PATH', __DIR__ . '/../venv/bin/python3');
     } 
     // 2. Fallback ke sistem Python macOS/Linux

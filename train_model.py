@@ -45,6 +45,7 @@ def ambil_data_regresi():
             sql = """
                 SELECT
                     x1_ayam, x2_sapi, x3_beras, x4_bumbu_merah, x5_bumbu_bawang, x6_minyak,
+                    x7_telur, x8_seafood, x9_jeroan, x10_jengkol, x11_tahu_tempe,
                     jumlah_porsi
                 FROM dataset_regresi
                 ORDER BY tanggal ASC
@@ -56,28 +57,34 @@ def ambil_data_regresi():
                 raise Exception("Tidak ada data dalam tabel dataset_regresi")
 
             # Pisahkan fitur (X) dan target (Y)
-            # X: [x1_ayam, x2_sapi, x3_beras, x4_bumbu_merah, x5_bumbu_bawang, x6_minyak]
+            # X: [x1_ayam, x2_sapi, x3_beras, x4_bumbu_merah, x5_bumbu_bawang, x6_minyak,
+            #     x7_telur, x8_seafood, x9_jeroan, x10_jengkol, x11_tahu_tempe]
             # Y: jumlah_porsi
             X_raw = []
             Y = []
 
             for row in results:
                 X_raw.append([
-                    float(row['x1_ayam']),
-                    float(row['x2_sapi']),
-                    float(row['x3_beras']),
-                    float(row['x4_bumbu_merah']),
-                    float(row['x5_bumbu_bawang']),
-                    float(row['x6_minyak'])
+                    float(row['x1_ayam'] or 0),
+                    float(row['x2_sapi'] or 0),
+                    float(row['x3_beras'] or 0),
+                    float(row['x4_bumbu_merah'] or 0),
+                    float(row['x5_bumbu_bawang'] or 0),
+                    float(row['x6_minyak'] or 0),
+                    float(row['x7_telur'] or 0),
+                    float(row['x8_seafood'] or 0),
+                    float(row['x9_jeroan'] or 0),
+                    float(row['x10_jengkol'] or 0),
+                    float(row['x11_tahu_tempe'] or 0)
                 ])
-                Y.append(float(row['jumlah_porsi']))
+                Y.append(float(row['jumlah_porsi'] or 0))
 
             # Konversi ke numpy array
             X_raw = np.array(X_raw)
             Y = np.array(Y)
 
             # Tambahkan kolom bias (intercept) sebagai kolom pertama
-            # X = [1, x1, x2, x3, x4, x5, x6]
+            # X = [1, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11]
             ones = np.ones((X_raw.shape[0], 1))
             X = np.concatenate([ones, X_raw], axis=1)
 
@@ -97,7 +104,7 @@ def hitung_regresi_linear_berganda(X, Y):
         Y: vector target (n_samples,)
 
     Return:
-        beta: vector koefisiensi [β0, β1, β2, β3, β4, β5, β6]
+        beta: vector koefisiensi [β0, β1, β2, β3, β4, β5, β6, β7, β8, β9, β10, β11]
     """
     # Hitung transpose X
     X_T = X.T
@@ -174,7 +181,7 @@ def simpan_model_regresi(beta, mad, r_squared, jumlah_data):
     Menyimpan hasil parameter koefisien dan evaluasi ke tabel model_regresi.
 
     Parameter:
-        beta: vector koefisiensi [β0, β1, β2, β3, β4, β5, β6]
+        beta: vector koefisiensi [β0, β1, β2, β3, β4, β5, β6, β7, β8, β9, β10, β11]
         mad: nilai Mean Absolute Deviation
         r_squared: nilai R-squared
         jumlah_data: jumlah data training yang digunakan
@@ -189,13 +196,13 @@ def simpan_model_regresi(beta, mad, r_squared, jumlah_data):
             # Insert record baru
             sql = """
                 INSERT INTO model_regresi
-                (beta0, beta1, beta2, beta3, beta4, beta5, beta6, mad, r_square, jumlah_data_training)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (beta0, beta1, beta2, beta3, beta4, beta5, beta6, beta7, beta8, beta9, beta10, beta11, mad, r_square, jumlah_data_training)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
 
-            # Pastikan beta memiliki 7 elemen (β0 hingga β6)
+            # Pastikan beta memiliki 12 elemen (β0 hingga β11)
             beta_list = beta.tolist() if hasattr(beta, 'tolist') else list(beta)
-            while len(beta_list) < 7:
+            while len(beta_list) < 12:
                 beta_list.append(0.0)  # padding jika kurang
 
             cursor.execute(sql, (
@@ -206,6 +213,11 @@ def simpan_model_regresi(beta, mad, r_squared, jumlah_data):
                 beta_list[4],  # beta4 (x4_bumbu_merah)
                 beta_list[5],  # beta5 (x5_bumbu_bawang)
                 beta_list[6],  # beta6 (x6_minyak)
+                beta_list[7],  # beta7 (x7_telur)
+                beta_list[8],  # beta8 (x8_seafood)
+                beta_list[9],  # beta9 (x9_jeroan)
+                beta_list[10], # beta10 (x10_jengkol)
+                beta_list[11], # beta11 (x11_tahu_tempe)
                 float(mad),
                 float(r_squared),
                 int(jumlah_data)
@@ -258,6 +270,11 @@ def main():
             'beta4': float(beta[4]),
             'beta5': float(beta[5]),
             'beta6': float(beta[6]),
+            'beta7': float(beta[7]),
+            'beta8': float(beta[8]),
+            'beta9': float(beta[9]),
+            'beta10': float(beta[10]),
+            'beta11': float(beta[11]),
             'mad': float(mad),
             'r_square': float(r_squared),
             'jumlah_data_training': int(jumlah_data)
