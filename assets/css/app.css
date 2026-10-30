@@ -166,6 +166,9 @@ main.flex-1 {
 }
 
 .app-content { padding: 1.5rem; flex: 1; }
+.container.dashboard-content {
+    max-width: 1400px;
+}
 
 .dashboard-content {
     max-width: 1400px;

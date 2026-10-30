@@ -434,7 +434,12 @@ $show_monitor     = $admin_view === 'beranda';
                                 <td><?= htmlspecialchars($row['nama_bahan']) ?></td>
                                 <td class="text-end"><?= format_jumlah($row['jumlah_terpakai'], $row['satuan']) ?></td>
                                 <td>
-                                    <a href="index.php?edit=<?= $row['id'] ?>" class="btn btn-sm btn-link p-0">Edit</a>
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-edit-stok-keluar"
+                                            data-id="<?= $row['id'] ?>"
+                                            data-tanggal="<?= $row['tanggal'] ?>"
+                                            data-nama-bahan="<?= htmlspecialchars($row['nama_bahan']) ?>"
+                                            data-jumlah="<?= $row['jumlah_terpakai'] ?>"
+                                            data-satuan="<?= htmlspecialchars($row['satuan']) ?>">Edit</button>
                                     <button class="btn btn-sm btn-link text-danger p-0" data-bs-toggle="modal"
                                             data-bs-target="#modalHapusAdmin"
                                             data-id="<?= $row['id'] ?>"
@@ -451,6 +456,7 @@ $show_monitor     = $admin_view === 'beranda';
         </div>
     </div>
 </div>
+
 
 <div class="modal fade" id="modalHapusAdmin" tabindex="-1">
     <div class="modal-dialog">
